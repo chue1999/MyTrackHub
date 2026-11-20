@@ -48,6 +48,8 @@ export interface TrackedEvent {
   name: string
   screen: string | null
   properties: Record<string, unknown>
+  success: boolean | null
+  result: string | null
   platform: string | null
   appVersion: string | null
   deviceModel: string | null

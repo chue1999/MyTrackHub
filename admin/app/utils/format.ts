@@ -62,3 +62,75 @@ export function timeAgo(value?: string | null) {
   const d = Math.round(h / 24)
   return d < 30 ? `${d} d ago` : formatDateTime(value)
 }
+
+/** What each T-Plus API means, keyed by the last part of its path. */
+export const API_LABELS: Record<string, string> = {
+  Login: 'Log in',
+  Register: 'Register account',
+  RegisterConfirm: 'Confirm registration (OTP)',
+  ForgetPassword: 'Forgot password',
+  ForgetPasswordConfirm: 'Reset password',
+  ForgetPasswordConfirmOTP: 'Confirm password reset (OTP)',
+  ChangePassword: 'Change password',
+  ChangePasswordConfirm: 'Confirm password change',
+  DeleteAccount: 'Delete account',
+  CheckKYCAndSimStatus: 'Check SIM / KYC status',
+  CheckKYCAndSimStatusByToken: 'Check SIM / KYC status',
+  QueryCustomerInfo: 'Load profile & balance',
+  QueryLatestRefill: 'Load latest top-ups',
+  QueryLogsRefill: 'Top-up history',
+  CardRifillForPrepaid: 'Top up with card',
+  TransferBalance: 'Transfer balance',
+  TransferConfirmOtp: 'Confirm transfer (OTP)',
+  QueryTransferHistoryLog: 'Transfer history',
+  ListPackage: 'List packages',
+  InquiryPackage: 'Check package',
+  RegisterPackage: 'Buy package',
+  PackageUssdData: 'Load data packages',
+  GetPackageDuration: 'Package durations',
+  QueryRegisterPackageHistory: 'Package history',
+  RegisterPackageBySpinerWheelGame: 'Claim package from lucky wheel',
+  PostpayPayment: 'Pay postpaid bill',
+  QueryLogsPostpaidPayment: 'Bill payment history',
+  BookingSimCard: 'Order SIM card',
+  QueryBranch: 'List branches',
+  GameRandom: 'Spin / open random box',
+  GetLuckySpinerInfo: 'Load lucky wheel',
+  QueryGameHistory: 'Game history',
+  CheckStatusGame: 'Check game status',
+  CheckValidGameUserProfile: 'Check game profile',
+  GetAllPremium: 'List premium gifts',
+  CreateRedeemPremium: 'Redeem premium gift',
+  createRedeemPremium: 'Redeem premium gift',
+  HistoryRedeemPremium: 'Premium redeem history',
+  CreatePredict: 'Make a prediction',
+  GetAllMatches: 'List matches',
+  GetAllMatchesGroupByDate: 'List matches',
+  GetMatchByUserId: 'My predictions',
+  Posters: 'Load home banners',
+  GetAllPost: 'Load social feed',
+  GetAllPostType: 'Load post types',
+  CheckUserChatProfile: 'Check chat profile',
+  getAllNotRead: 'Unread notifications',
+  TopVideo: 'Top videos',
+  GetShortVideo: 'Short videos',
+  GetVideoByCategory: 'Videos by category',
+  GetVideodetail: 'Watch video',
+  GetCatoryVideo: 'Video categories',
+  ListVideoPackages: 'Video packages',
+  AddVideoPackagePayments: 'Buy video package',
+  QueryBook: 'Books',
+  SearchBook: 'Search books',
+  BookPayment: 'Buy book',
+  QueryMyBook: 'My books',
+  getRentalPackage: 'Data borrowing packages',
+  rentalServices: 'Borrow data / balance',
+  historyRental: 'Borrowing history',
+}
+
+/** "POST /tplusapp/GameRandom" → "Spin / open random box" (or the raw name). */
+export function apiLabel(name: string) {
+  const path = name.split(' ')[1] ?? name
+  const last = path.split('/').filter((s) => s && !s.startsWith(':')).pop() ?? path
+  return API_LABELS[last] ?? last
+}

@@ -3,7 +3,7 @@ import type { AppUser, Paged, TrackedEvent } from '~/composables/useApi'
 
 interface UserDetail {
   user: AppUser
-  summary: { totalEvents: number; screenViews: number; taps: number; sessions: number }
+  summary: { totalEvents: number; screenViews: number; taps: number; sessions: number; failed: number }
   topScreens: { name: string; count: number }[]
   devices: { deviceId: string; deviceModel: string | null; platform: string | null; lastUsedAt: string }[]
 }
@@ -85,6 +85,8 @@ useLive().onEvents(({ user, events: incoming }) => {
               { label: 'Sessions', value: detail.summary.sessions, icon: 'mdi-timer-outline' },
               { label: 'Screens', value: detail.summary.screenViews, icon: 'mdi-cellphone-screenshot' },
               { label: 'Taps', value: detail.summary.taps, icon: 'mdi-gesture-tap' },
+              { label: 'Failed', value: detail.summary.failed, icon: 'mdi-alert-circle-outline' },
+              { label: 'Logins', value: detail.user.loginCount, icon: 'mdi-login' },
             ]" :key="s.label" cols="6">
               <v-card class="bordered">
                 <v-card-text class="pa-3">

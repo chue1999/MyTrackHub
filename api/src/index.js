@@ -13,7 +13,7 @@ import trackRoutes from './routes/track.js';
 const app = express();
 app.set('trust proxy', 1);
 app.use(helmet());
-app.use(express.json({ limit: '512kb' }));
+app.use(express.json({ limit: '2mb' }));
 
 // The app calls /api/v1/track from phones (no browser origin), so CORS only
 // matters for the admin website.

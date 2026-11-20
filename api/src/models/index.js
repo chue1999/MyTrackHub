@@ -38,6 +38,9 @@ export const Event = sequelize.define(
     name: { type: DataTypes.STRING(150), allowNull: false },
     screen: { type: DataTypes.STRING(150) },
     properties: { type: DataTypes.JSONB, allowNull: false, defaultValue: {} },
+    // For API calls: did it work, and the server's message (ResultDesc).
+    success: { type: DataTypes.BOOLEAN },
+    result: { type: DataTypes.STRING(300) },
     platform: { type: DataTypes.STRING(20) },
     appVersion: { type: DataTypes.STRING(30) },
     deviceId: { type: DataTypes.STRING(100) },
@@ -54,6 +57,7 @@ export const Event = sequelize.define(
       { fields: ['occurred_at'] },
       { fields: ['type', 'name'] },
       { fields: ['msisdn'] },
+      { fields: ['success', 'occurred_at'] },
     ],
   },
 );

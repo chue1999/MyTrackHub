@@ -2,7 +2,14 @@
 import type { TrackedEvent } from '~/composables/useApi'
 
 interface Overview {
-  totals: { totalUsers: number; newUsersToday: number; activeToday: number; eventsToday: number; loginsToday: number }
+  totals: {
+    totalUsers: number
+    newUsersToday: number
+    activeToday: number
+    eventsToday: number
+    loginsToday: number
+    failedToday: number
+  }
   daily: { date: string; activeUsers: number; events: number; logins: number }[]
   topScreens: { name: string; count: number; users: number }[]
   topTaps: { name: string; count: number; users: number }[]
@@ -37,6 +44,7 @@ live.onEvents(({ events }) => {
         ...t,
         eventsToday: t.eventsToday + events.length,
         loginsToday: t.loginsToday + events.filter((e) => e.type === 'login').length,
+        failedToday: t.failedToday + events.filter((e) => e.success === false).length,
       },
     }
   }
@@ -75,6 +83,20 @@ live.onEvents(({ events }) => {
         </v-col>
         <v-col cols="12" sm="6" lg="3">
           <StatCard title="Actions today" :value="data.totals.eventsToday" icon="mdi-gesture-tap" color="warning" />
+        </v-col>
+        <v-col cols="12">
+          <v-alert
+            v-if="data.totals.failedToday"
+            type="error"
+            variant="tonal"
+            icon="mdi-alert-circle-outline"
+            rounded="lg"
+          >
+            <strong>{{ data.totals.failedToday }}</strong> failed action{{ data.totals.failedToday > 1 ? 's' : '' }} today.
+            <template #append>
+              <v-btn to="/events" variant="text" size="small" class="text-none">See activity log</v-btn>
+            </template>
+          </v-alert>
         </v-col>
       </v-row>
 
@@ -182,11 +204,9 @@ live.onEvents(({ events }) => {
           </thead>
           <tbody>
             <tr v-for="a in data.topApis" :key="a.name">
-              <td class="text-mono text-body-2">
-                <v-chip size="x-small" variant="tonal" :color="a.name.startsWith('GET') ? 'info' : 'purple'" class="mr-2">
-                  {{ a.name.split(' ')[0] }}
-                </v-chip>
-                {{ a.name.split(' ').slice(1).join(' ') }}
+              <td>
+                <div class="font-weight-medium">{{ apiLabel(a.name) }}</div>
+                <div class="text-caption text-medium-emphasis text-mono">{{ a.name }}</div>
               </td>
               <td class="text-end font-weight-bold">{{ a.count.toLocaleString() }}</td>
               <td class="text-end">{{ a.users }}</td>

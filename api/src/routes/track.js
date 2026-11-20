@@ -11,8 +11,11 @@ const router = Router();
 
 const eventSchema = z.object({
   type: z.enum(EVENT_TYPES),
-  name: z.string().trim().min(1).max(150),
-  screen: z.string().trim().max(150).optional().nullable(),
+  // Long values are shortened instead of rejecting the event.
+  name: z.string().trim().min(1).transform((s) => s.slice(0, 150)),
+  screen: z.string().trim().transform((s) => s.slice(0, 150)).optional().nullable(),
+  success: z.boolean().optional().nullable(),
+  result: z.string().transform((s) => s.slice(0, 300)).optional().nullable(),
   sessionId: z.string().max(64).optional().nullable(),
   properties: z.record(z.string(), z.any()).optional().nullable(),
   occurredAt: z.coerce.date().optional(),
@@ -85,6 +88,8 @@ router.post('/', limiter, requireAppKey, async (req, res, next) => {
         name: e.name,
         screen: e.screen ?? null,
         properties: sanitizeProperties(e.properties ?? {}),
+        success: e.success ?? null,
+        result: e.result ?? null,
         platform: body.platform ?? null,
         appVersion: body.appVersion ?? null,
         deviceId: body.deviceId ?? null,

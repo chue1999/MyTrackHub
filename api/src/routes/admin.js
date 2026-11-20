@@ -83,7 +83,7 @@ router.get('/stats/overview', async (req, res, next) => {
     const since = new Date(startOfToday);
     since.setDate(since.getDate() - (days - 1));
 
-    const [totalUsers, newUsersToday, eventsToday, loginsToday, activeToday] = await Promise.all([
+    const [totalUsers, newUsersToday, eventsToday, loginsToday, activeToday, failedToday] = await Promise.all([
       AppUser.count(),
       AppUser.count({ where: { firstSeenAt: { [Op.gte]: startOfToday } } }),
       Event.count({ where: { occurredAt: { [Op.gte]: startOfToday } } }),
@@ -93,6 +93,7 @@ router.get('/stats/overview', async (req, res, next) => {
         distinct: true,
         col: 'user_id',
       }),
+      Event.count({ where: { success: false, occurredAt: { [Op.gte]: startOfToday } } }),
     ]);
 
     const daily = await sequelize.query(
@@ -121,7 +122,7 @@ router.get('/stats/overview', async (req, res, next) => {
     const topApis = await sequelize.query(
       `SELECT name, COUNT(*)::int AS count, COUNT(DISTINCT user_id)::int AS users,
               ROUND(AVG((properties->>'ms')::numeric))::int AS "avgMs",
-              COUNT(*) FILTER (WHERE (properties->>'ok')::boolean IS NOT TRUE)::int AS failed
+              COUNT(*) FILTER (WHERE success IS FALSE)::int AS failed
          FROM events
         WHERE type = 'api' AND occurred_at >= :since
         GROUP BY name
@@ -131,7 +132,7 @@ router.get('/stats/overview', async (req, res, next) => {
     );
 
     res.json({
-      totals: { totalUsers, newUsersToday, activeToday, eventsToday, loginsToday },
+      totals: { totalUsers, newUsersToday, activeToday, eventsToday, loginsToday, failedToday },
       daily,
       topScreens,
       topTaps,
@@ -183,6 +184,7 @@ router.get('/users/:id', async (req, res, next) => {
       `SELECT COUNT(*)::int AS "totalEvents",
               COUNT(*) FILTER (WHERE type = 'screen_view')::int AS "screenViews",
               COUNT(*) FILTER (WHERE type = 'tap')::int AS taps,
+              COUNT(*) FILTER (WHERE success IS FALSE)::int AS failed,
               COUNT(DISTINCT session_id)::int AS sessions
          FROM events WHERE user_id = :id`,
       { replacements: { id: user.id }, type: QueryTypes.SELECT },
@@ -223,6 +225,8 @@ router.get('/events', async (req, res, next) => {
       where.userId = req.query.userId;
     }
     if (EVENT_TYPES.includes(req.query.type)) where.type = req.query.type;
+    if (req.query.success === 'true') where.success = true;
+    if (req.query.success === 'false') where.success = false;
     const range = dateRange(req.query);
     if (range) where.occurredAt = range;
     const search = String(req.query.search || '').trim();
@@ -231,6 +235,7 @@ router.get('/events', async (req, res, next) => {
       where[Op.or] = [
         { name: { [Op.iLike]: like(search) } },
         { screen: { [Op.iLike]: like(search) } },
+        { result: { [Op.iLike]: like(search) } },
         ...(digits.length >= 3 ? [{ msisdn: { [Op.like]: like(digits) } }] : []),
       ];
     }
