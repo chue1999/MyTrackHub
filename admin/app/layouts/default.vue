@@ -34,6 +34,7 @@ const nav = computed(() => [
   { title: 'Activity log', icon: 'mdi-timeline-text-outline', activeIcon: 'mdi-timeline-text', to: '/events' },
   { title: 'App features', icon: 'mdi-apps', activeIcon: 'mdi-apps', to: '/features' },
   { title: 'Packages', icon: 'mdi-package-variant', activeIcon: 'mdi-package-variant-closed', to: '/packages' },
+  { title: 'Reports', icon: 'mdi-file-chart-outline', activeIcon: 'mdi-file-chart', to: '/reports' },
 ])
 const adminNav = computed(() =>
   admin.value?.role === 'admin'

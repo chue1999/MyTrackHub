@@ -484,7 +484,7 @@ router.get('/stats/features', async (req, res, next) => {
 /** GET /users?search=&page=&pageSize=&sort=lastSeenAt|loginCount|firstSeenAt */
 router.get('/users', async (req, res, next) => {
   try {
-    const { page, pageSize, offset } = paging(req.query);
+    const { page, pageSize, offset } = paging(req.query, 5000);
     const where = {};
     const search = String(req.query.search || '').trim();
     if (search) {
@@ -600,7 +600,8 @@ router.patch('/users/:id', async (req, res, next) => {
  */
 router.get('/events', async (req, res, next) => {
   try {
-    const { page, pageSize, offset } = paging(req.query, 200);
+    // Reports export in pages of up to 5000 rows.
+    const { page, pageSize, offset } = paging(req.query, 5000);
     const where = {};
     if (req.query.userId) {
       if (!UUID.test(req.query.userId)) return res.status(400).json({ message: 'Invalid userId' });
