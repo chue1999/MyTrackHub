@@ -170,6 +170,46 @@ useLive().onEvents(({ user, events: incoming }) => {
           </v-row>
 
           <v-card class="bordered mt-3">
+            <v-card-item prepend-icon="mdi-package-variant">
+              <v-card-title class="text-subtitle-1 font-weight-bold">Packages &amp; data</v-card-title>
+              <v-card-subtitle v-if="detail.user.packagesUpdatedAt">Checked {{ timeAgo(detail.user.packagesUpdatedAt) }} in the app</v-card-subtitle>
+            </v-card-item>
+            <v-card-text v-if="detail.user.activePackages?.length" class="pt-0">
+              <div class="data-total">
+                <div>
+                  <div class="text-caption text-medium-emphasis">Data left</div>
+                  <div class="text-h5 font-weight-black">{{ formatMb(detail.user.dataRemainMb) }}</div>
+                </div>
+                <div class="text-right">
+                  <div class="text-caption text-medium-emphasis">Used</div>
+                  <div class="text-subtitle-1 font-weight-bold">{{ formatMb(detail.user.dataUsedMb) }}</div>
+                </div>
+              </div>
+              <div v-for="(pk, i) in detail.user.activePackages" :key="i" class="pkg">
+                <div class="d-flex align-center justify-space-between ga-2">
+                  <span class="font-weight-bold text-truncate">{{ pk.name || 'Package' }}</span>
+                  <span class="text-body-2 font-weight-bold text-no-wrap">{{ formatMb(pk.remainMb) }} left</span>
+                </div>
+                <v-progress-linear
+                  :model-value="pk.totalMb ? ((pk.usedMb ?? 0) / pk.totalMb) * 100 : 0"
+                  :color="pk.totalMb && (pk.remainMb ?? 0) / pk.totalMb < 0.1 ? 'error' : 'primary'"
+                  bg-color="grey-lighten-1"
+                  height="8"
+                  rounded
+                  class="my-1"
+                />
+                <div class="d-flex justify-space-between text-caption text-medium-emphasis">
+                  <span>{{ formatMb(pk.usedMb) }} of {{ formatMb(pk.totalMb) }} used</span>
+                  <span v-if="pk.expiry">expires {{ pk.expiry }}</span>
+                </div>
+              </div>
+            </v-card-text>
+            <v-card-text v-else class="pt-0 text-medium-emphasis text-body-2">
+              No package information yet. It appears after the user opens the app's home screen.
+            </v-card-text>
+          </v-card>
+
+          <v-card class="bordered mt-3">
             <v-card-item prepend-icon="mdi-star-outline">
               <v-card-title class="text-subtitle-1 font-weight-bold">Favourite screens</v-card-title>
             </v-card-item>
@@ -261,3 +301,8 @@ useLive().onEvents(({ user, events: incoming }) => {
     </template>
   </div>
 </template>
+
+<style scoped>
+.data-total { display: flex; align-items: flex-end; justify-content: space-between; padding: 12px 14px; margin-bottom: 10px; border-radius: 12px; background: rgba(var(--v-theme-primary), 0.12); }
+.pkg + .pkg { margin-top: 12px; }
+</style>

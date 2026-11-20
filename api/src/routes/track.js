@@ -77,6 +77,15 @@ router.post('/', limiter, requireAppKey, async (req, res, next) => {
           updates.loginCount = user.loginCount + logins.length;
           updates.lastLoginAt = when(logins[logins.length - 1].occurredAt);
         }
+        // Keep the newest active-packages snapshot on the user.
+        const snap = [...body.events].reverse().find((e) => e.type === 'action' && e.name === 'active_packages');
+        if (snap?.properties && Array.isArray(snap.properties.packages)) {
+          const num = (v) => (Number.isFinite(Number(v)) ? Math.round(Number(v)) : null);
+          updates.activePackages = sanitizeProperties({ list: snap.properties.packages.slice(0, 30) }).list ?? [];
+          updates.dataRemainMb = num(snap.properties.remainMb);
+          updates.dataUsedMb = num(snap.properties.usedMb);
+          updates.packagesUpdatedAt = when(snap.occurredAt);
+        }
         await user.update(updates, { transaction });
       }
 

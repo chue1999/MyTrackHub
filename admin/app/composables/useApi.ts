@@ -38,6 +38,10 @@ export interface AppUser {
   lastSeenAt: string
   lastLoginAt: string | null
   note?: string | null
+  activePackages?: { name?: string; product?: string | number; totalMb?: number; usedMb?: number; remainMb?: number; expiry?: string }[] | null
+  dataRemainMb?: number | null
+  dataUsedMb?: number | null
+  packagesUpdatedAt?: string | null
 }
 
 export interface TrackedEvent {

@@ -90,6 +90,9 @@ export const API_LABELS: Record<string, string> = {
   GetPackageDuration: 'Package durations',
   QueryRegisterPackageHistory: 'Package history',
   RegisterPackageBySpinerWheelGame: 'Claim package from lucky wheel',
+  RegisterPackageByMMonney: 'Buy package (MMoney)',
+  RegisterPackageIR: 'Buy roaming package',
+  QueryPackageIR: 'List roaming packages',
   PostpayPayment: 'Pay postpaid bill',
   QueryLogsPostpaidPayment: 'Bill payment history',
   BookingSimCard: 'Order SIM card',
@@ -202,6 +205,14 @@ export function apiSummary(e: Ev): SummaryRow[] {
       add('Rental id', body.rentalId, 'mdi-identifier', true)
       break
   }
+  const purchase = e.properties?.purchase as Record<string, any> | undefined
+  if (purchase && endpoint.startsWith('RegisterPackage')) {
+    rows.length = 0
+    add('Package', [purchase.name || purchase.code, purchase.net, purchase.duration].filter(Boolean).join(' · '), 'mdi-package-variant', true)
+    add('Price', purchase.price != null ? formatMoney(purchase.price) : null, 'mdi-cash', true)
+    add('Paid with', CHANNEL_META[purchase.channel]?.label ?? purchase.channel, CHANNEL_META[purchase.channel]?.icon ?? 'mdi-wallet-outline')
+    add('For number', purchase.forNumber ? phone(purchase.forNumber) : me, 'mdi-cellphone')
+  }
   if (body.GiftCode) {
     add('Gift code', body.GiftCode, 'mdi-gift-outline', true)
     add('Data', body.Net, 'mdi-wifi')
@@ -221,6 +232,7 @@ export function apiSummaryLine(e: Ev) {
 const ACTION_LABELS: Record<string, string> = {
   app_started: 'Started the app',
   app_opened: 'Came back to the app',
+  active_packages: 'Checked packages & data',
 }
 
 /** Human title for any event: "Logged in", "Transfer balance", "Opened HomeScreen"… */
@@ -274,4 +286,19 @@ export function logoutReason(reason: unknown) {
   const idle = r.match(/^inactive_(\d+)_min$/)
   if (idle) return `No activity for ${idle[1]} minutes`
   return LOGOUT_REASONS[r] ?? (r || '')
+}
+
+/** 1536 → "1.5 GB", 300 → "300 MB" (the app reports data in MB). */
+export function formatMb(mb: unknown) {
+  const n = Number(mb)
+  if (!Number.isFinite(n)) return '—'
+  if (Math.abs(n) >= 1024) return `${(n / 1024).toLocaleString('en-US', { maximumFractionDigits: 2 })} GB`
+  return `${Math.round(n).toLocaleString('en-US')} MB`
+}
+
+export const CHANNEL_META: Record<string, { label: string; icon: string; color: string }> = {
+  balance: { label: 'Paid with balance', icon: 'mdi-wallet-outline', color: 'var(--series-1)' },
+  mmoney: { label: 'Paid with MMoney', icon: 'mdi-cellphone-nfc', color: 'var(--series-2)' },
+  roaming: { label: 'Roaming package', icon: 'mdi-airplane', color: 'var(--series-3)' },
+  lucky_wheel: { label: 'Lucky wheel prize (free)', icon: 'mdi-ferris-wheel', color: 'var(--series-4)' },
 }

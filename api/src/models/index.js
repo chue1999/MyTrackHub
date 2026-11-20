@@ -18,6 +18,11 @@ export const AppUser = sequelize.define(
     lastLoginAt: { type: DataTypes.DATE },
     // Internal note written by staff on the admin website.
     note: { type: DataTypes.TEXT },
+    // Latest snapshot of the user's active packages (from the app's InquiryPackage call).
+    activePackages: { type: DataTypes.JSONB },
+    dataRemainMb: { type: DataTypes.INTEGER },
+    dataUsedMb: { type: DataTypes.INTEGER },
+    packagesUpdatedAt: { type: DataTypes.DATE },
   },
   {
     tableName: 'app_users',

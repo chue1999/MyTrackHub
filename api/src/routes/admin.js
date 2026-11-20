@@ -318,6 +318,116 @@ router.get('/stats/overview', async (req, res, next) => {
   }
 });
 
+// ── packages: sold, revenue, data balance ───────────────────────────
+
+/**
+ * GET /stats/packages?days=30
+ * Purchases come from the app's RegisterPackage* API calls (price attached by
+ * the app); data balance comes from each user's latest active-packages snapshot.
+ */
+router.get('/stats/packages', async (req, res, next) => {
+  try {
+    const days = Math.min(365, Math.max(1, Number.parseInt(req.query.days, 10) || 30));
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const since = new Date(startOfToday);
+    since.setDate(since.getDate() - (days - 1));
+
+    // One row per purchase attempt, with the useful fields pulled out.
+    const base = `
+      WITH p AS (
+        SELECT e.id, e.occurred_at, e.success, e.result, e.user_id,
+               COALESCE(e.properties->'purchase'->>'channel',
+                 CASE WHEN e.name LIKE '%SpinerWheel%' THEN 'lucky_wheel'
+                      WHEN e.name LIKE '%MMonney%' THEN 'mmoney'
+                      WHEN e.name LIKE '%PackageIR%' THEN 'roaming'
+                      ELSE 'balance' END) AS channel,
+               COALESCE(e.properties->'purchase'->>'code',
+                        e.properties->'request'->'body'->>'PackageCode',
+                        e.properties->'request'->'body'->>'pkCode') AS code,
+               e.properties->'purchase'->>'name' AS name,
+               e.properties->'purchase'->>'net' AS net,
+               e.properties->'purchase'->>'duration' AS duration,
+               e.properties->'purchase'->>'forWhom' AS for_whom,
+               e.properties->'purchase'->>'forNumber' AS for_number,
+               NULLIF(regexp_replace(COALESCE(e.properties->'purchase'->>'price', ''), '[^0-9.]', '', 'g'), '')::numeric AS price
+          FROM events e
+         WHERE e.type = 'api' AND e.name LIKE '%RegisterPackage%' AND e.occurred_at >= :since
+      )`;
+    const q = (sql, extra = {}) =>
+      sequelize.query(`${base} ${sql}`, { replacements: { since, today: startOfToday, ...extra }, type: QueryTypes.SELECT });
+
+    const [[totals], [today], byChannel, topPackages, daily, recent] = await Promise.all([
+      q(`SELECT COUNT(*) FILTER (WHERE success IS TRUE)::int AS sold,
+                COUNT(*) FILTER (WHERE success IS FALSE)::int AS failed,
+                COUNT(*) FILTER (WHERE success IS NULL)::int AS unknown,
+                COALESCE(SUM(price) FILTER (WHERE success IS TRUE), 0)::float AS revenue,
+                COUNT(*) FILTER (WHERE success IS TRUE AND price IS NULL)::int AS "soldNoPrice",
+                COUNT(DISTINCT user_id) FILTER (WHERE success IS TRUE)::int AS buyers
+           FROM p`),
+      q(`SELECT COUNT(*) FILTER (WHERE success IS TRUE)::int AS sold,
+                COALESCE(SUM(price) FILTER (WHERE success IS TRUE), 0)::float AS revenue
+           FROM p WHERE occurred_at >= :today`),
+      q(`SELECT channel, COUNT(*) FILTER (WHERE success IS TRUE)::int AS sold,
+                COALESCE(SUM(price) FILTER (WHERE success IS TRUE), 0)::float AS revenue
+           FROM p GROUP BY channel ORDER BY sold DESC`),
+      q(`SELECT code, MAX(name) AS name, MAX(net) AS net, MAX(duration) AS duration,
+                MAX(price)::float AS price,
+                COUNT(*) FILTER (WHERE success IS TRUE)::int AS sold,
+                COUNT(*) FILTER (WHERE success IS FALSE)::int AS failed,
+                COALESCE(SUM(price) FILTER (WHERE success IS TRUE), 0)::float AS revenue
+           FROM p WHERE code IS NOT NULL
+          GROUP BY code ORDER BY revenue DESC, sold DESC LIMIT 10`),
+      sequelize.query(
+        `${base}
+         SELECT to_char(d.day, 'YYYY-MM-DD') AS date,
+                COUNT(p.id) FILTER (WHERE p.success IS TRUE)::int AS sold,
+                COALESCE(SUM(p.price) FILTER (WHERE p.success IS TRUE), 0)::float AS revenue
+           FROM generate_series(:since::date, CURRENT_DATE, interval '1 day') AS d(day)
+           LEFT JOIN p ON p.occurred_at >= d.day AND p.occurred_at < d.day + interval '1 day'
+          GROUP BY d.day ORDER BY d.day`,
+        { replacements: { since }, type: QueryTypes.SELECT },
+      ),
+      q(`SELECT p.id::text AS id, p.occurred_at AS "occurredAt", p.success, p.result, p.channel, p.code,
+                p.name, p.net, p.duration, p.price::float AS price, p.for_whom AS "forWhom", p.for_number AS "forNumber",
+                u.id AS "userId", u.msisdn, u.first_name AS "firstName", u.last_name AS "lastName"
+           FROM p LEFT JOIN app_users u ON u.id = p.user_id
+          ORDER BY p.occurred_at DESC LIMIT 15`),
+    ]);
+
+    // Data balance from each user's latest snapshot.
+    const [data] = await sequelize.query(
+      `SELECT COUNT(*) FILTER (WHERE jsonb_array_length(COALESCE(active_packages, '[]'::jsonb)) > 0)::int AS "usersWithPackages",
+              COALESCE(SUM(jsonb_array_length(COALESCE(active_packages, '[]'::jsonb))), 0)::int AS "activePackages",
+              COALESCE(SUM(data_remain_mb), 0)::float AS "remainMb",
+              COALESCE(SUM(data_used_mb), 0)::float AS "usedMb"
+         FROM app_users WHERE packages_updated_at IS NOT NULL`,
+      { type: QueryTypes.SELECT },
+    );
+    const inUse = await sequelize.query(
+      `SELECT pkg->>'name' AS name, COUNT(*)::int AS users,
+              COALESCE(SUM(NULLIF(pkg->>'remainMb', '')::numeric), 0)::float AS "remainMb",
+              COALESCE(SUM(NULLIF(pkg->>'usedMb', '')::numeric), 0)::float AS "usedMb"
+         FROM app_users, jsonb_array_elements(COALESCE(active_packages, '[]'::jsonb)) AS pkg
+        GROUP BY pkg->>'name' ORDER BY users DESC LIMIT 10`,
+      { type: QueryTypes.SELECT },
+    );
+    const lowData = await sequelize.query(
+      `SELECT id, msisdn, first_name AS "firstName", last_name AS "lastName",
+              data_remain_mb AS "remainMb", data_used_mb AS "usedMb", packages_updated_at AS "updatedAt",
+              jsonb_array_length(COALESCE(active_packages, '[]'::jsonb))::int AS packages
+         FROM app_users
+        WHERE packages_updated_at IS NOT NULL
+        ORDER BY data_remain_mb ASC NULLS LAST LIMIT 10`,
+      { type: QueryTypes.SELECT },
+    );
+
+    res.json({ days, totals, today, byChannel, topPackages, daily, recent, data, inUse, lowData });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ── users ────────────────────────────────────────────────────────────
 
 /** GET /users?search=&page=&pageSize=&sort=lastSeenAt|loginCount|firstSeenAt */
