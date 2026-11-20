@@ -231,7 +231,7 @@ export function eventTitle(e: { type: string; name: string }) {
     case 'login':
       return 'Logged in'
     case 'logout':
-      return 'Logged out'
+      return e.name === 'logout_to_password' ? 'Locked: back to password' : 'Logged out: back to phone number'
     case 'screen_view':
       return screenLabel(e.name)
     case 'action':
@@ -260,4 +260,18 @@ export const TYPE_COLOR: Record<string, string> = {
   login: 'var(--series-5)',
   logout: 'var(--series-6)',
   error: 'var(--series-7)',
+}
+
+const LOGOUT_REASONS: Record<string, string> = {
+  logout_button: 'Tapped Logout in Settings',
+  password_changed: 'Changed password',
+  account_deleted: 'Deleted account',
+}
+
+/** Why a logout happened, in plain words. */
+export function logoutReason(reason: unknown) {
+  const r = String(reason ?? '')
+  const idle = r.match(/^inactive_(\d+)_min$/)
+  if (idle) return `No activity for ${idle[1]} minutes`
+  return LOGOUT_REASONS[r] ?? (r || '')
 }

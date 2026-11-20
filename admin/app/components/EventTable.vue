@@ -26,8 +26,13 @@ function open(e: TrackedEvent) {
   dialog.value = true
 }
 
-const iconColor = (e: TrackedEvent) =>
-  e.type === 'api' ? (e.success === false ? 'error' : e.success ? 'success' : 'purple') : EVENT_META[e.type]?.color
+const iconColor = (e: TrackedEvent) => {
+  if (e.type === 'api') return e.success === false ? 'error' : e.success ? 'success' : 'purple'
+  if (e.type === 'logout') return e.name === 'logout_to_password' ? '#eb6834' : '#2a78d6'
+  return EVENT_META[e.type]?.color
+}
+const iconOf = (e: TrackedEvent) =>
+  e.type === 'logout' && e.name === 'logout_to_password' ? 'mdi-lock-clock' : EVENT_META[e.type]?.icon
 const p = (e: TrackedEvent) => e.properties as Record<string, any>
 </script>
 
@@ -75,7 +80,7 @@ const p = (e: TrackedEvent) => e.properties as Record<string, any>
       <template #item.action="{ item }">
         <div class="d-flex align-center ga-3 py-2">
           <v-avatar :color="iconColor(item)" variant="tonal" rounded="lg" size="34">
-            <v-icon :icon="EVENT_META[item.type]?.icon" size="18" />
+            <v-icon :icon="iconOf(item)" size="18" />
           </v-avatar>
           <div style="min-width: 0">
             <div class="text-body-2 font-weight-bold">{{ eventTitle(item) }}</div>
@@ -101,6 +106,9 @@ const p = (e: TrackedEvent) => e.properties as Record<string, any>
           <div v-if="item.type === 'api'" class="text-caption text-medium-emphasis text-mono">
             {{ item.name.split(' ')[0] }} {{ screenLabel(item.name.split(' ')[1] ?? '') }}
             <template v-if="p(item).ms != null"> · {{ p(item).ms }} ms</template>
+          </div>
+          <div v-else-if="item.type === 'logout' && p(item).reason" class="text-body-2 text-medium-emphasis">
+            <v-icon :icon="item.name === 'logout_to_password' ? 'mdi-lock-clock' : 'mdi-logout'" size="14" class="mr-1" />{{ logoutReason(p(item).reason) }}
           </div>
           <div v-else-if="item.type === 'screen_view' && item.name.includes('/')" class="text-caption text-medium-emphasis text-mono text-truncate" style="max-width: 360px">
             {{ item.name }}

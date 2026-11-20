@@ -270,8 +270,19 @@ router.get('/stats/overview', async (req, res, next) => {
       { replacements: { since }, type: QueryTypes.SELECT },
     );
 
+    // Two kinds of logout: full (back to phone number) vs locked (back to password).
+    const [logouts] = await sequelize.query(
+      `SELECT COUNT(*) FILTER (WHERE name IN ('logout', 'logout_full'))::int AS full,
+              COUNT(*) FILTER (WHERE name = 'logout_to_password')::int AS "toPassword",
+              COUNT(*) FILTER (WHERE name IN ('logout', 'logout_full') AND occurred_at >= :today)::int AS "fullToday",
+              COUNT(*) FILTER (WHERE name = 'logout_to_password' AND occurred_at >= :today)::int AS "toPasswordToday"
+         FROM events WHERE type = 'logout' AND occurred_at >= :since`,
+      { replacements: { since, today: startOfToday }, type: QueryTypes.SELECT },
+    );
+
     res.json({
       totals: { totalUsers, newUsersToday, activeToday, eventsToday, loginsToday, failedToday },
+      logouts,
       byType,
       apiResults,
       transfersToday,

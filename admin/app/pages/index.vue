@@ -14,6 +14,7 @@ interface Transfer {
   lastName: string | null
 }
 interface Overview {
+  logouts: { full: number; toPassword: number; fullToday: number; toPasswordToday: number }
   totals: {
     totalUsers: number
     newUsersToday: number
@@ -50,6 +51,32 @@ const trend = computed(() =>
     value: d[metric.value],
   })),
 )
+
+// ── logouts: full vs back to password ──
+const logoutParts = computed(() => {
+  const l = data.value?.logouts
+  if (!l) return []
+  return [
+    {
+      key: 'full',
+      label: 'Logged out completely',
+      description: 'Back to entering phone number, then password',
+      value: l.full,
+      color: 'var(--series-1)',
+      icon: 'mdi-logout',
+      extra: `${l.fullToday} today`,
+    },
+    {
+      key: 'password',
+      label: 'Locked: back to password',
+      description: 'Still signed in; only the password (PIN) is asked again',
+      value: l.toPassword,
+      color: 'var(--series-2)',
+      icon: 'mdi-lock-clock',
+      extra: `${l.toPasswordToday} today`,
+    },
+  ]
+})
 
 // ── pies ──
 const typeSlices = computed(() =>
@@ -203,6 +230,17 @@ live.onEvents(({ events }) => {
         </v-card-item>
         <v-card-text>
           <ColumnChart :points="trend" :unit="METRIC_LABEL[metric]" />
+        </v-card-text>
+      </v-card>
+
+      <!-- logouts -->
+      <v-card class="bordered mt-4">
+        <v-card-item prepend-icon="mdi-logout-variant">
+          <v-card-title class="font-weight-bold">Logouts</v-card-title>
+          <v-card-subtitle>How users left the app · {{ days }} days</v-card-subtitle>
+        </v-card-item>
+        <v-card-text>
+          <SplitBar :parts="logoutParts" empty-text="No logouts yet" :height="52" />
         </v-card-text>
       </v-card>
 
