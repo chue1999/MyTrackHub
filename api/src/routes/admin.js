@@ -431,6 +431,9 @@ router.get('/events', async (req, res, next) => {
         { name: { [Op.iLike]: like(search) } },
         { screen: { [Op.iLike]: like(search) } },
         { result: { [Op.iLike]: like(search) } },
+        // the user's name (e.g. typing "Somsack" finds his actions too)
+        { '$user.first_name$': { [Op.iLike]: like(search) } },
+        { '$user.last_name$': { [Op.iLike]: like(search) } },
         ...(digits.length >= 3 ? [{ msisdn: { [Op.like]: like(digits) } }] : []),
         // Also look inside request/response details (e.g. a transfer receiver).
         ...(digits.length >= 6

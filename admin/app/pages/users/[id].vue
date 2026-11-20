@@ -17,15 +17,31 @@ const { data: detail, error, refresh: refreshDetail } = await useAsyncData(`user
 )
 
 const type = ref<string | null>(null)
+const userSearch = ref('')
+const userSearchDebounced = ref('')
+let usTimer: ReturnType<typeof setTimeout> | undefined
+watch(userSearch, (v) => {
+  clearTimeout(usTimer)
+  usTimer = setTimeout(() => {
+    userSearchDebounced.value = (v || '').trim()
+    page.value = 1
+  }, 300)
+})
 const page = ref(1)
 const pageSize = ref(50)
 const { data: events, pending } = await useAsyncData(
   `user-events-${id.value}`,
   () =>
     api<Paged<TrackedEvent>>('/events', {
-      query: { userId: id.value, type: type.value || undefined, page: page.value, pageSize: pageSize.value },
+      query: {
+        userId: id.value,
+        type: type.value || undefined,
+        search: userSearchDebounced.value || undefined,
+        page: page.value,
+        pageSize: pageSize.value,
+      },
     }),
-  { watch: [type, page, pageSize] },
+  { watch: [type, userSearchDebounced, page, pageSize] },
 )
 watch(type, () => (page.value = 1))
 
@@ -187,15 +203,26 @@ useLive().onEvents(({ user, events: incoming }) => {
               <v-card-title class="font-weight-bold">Activity</v-card-title>
               <v-card-subtitle>{{ (events?.total ?? 0).toLocaleString() }} actions, newest first</v-card-subtitle>
               <template #append>
-                <v-select
-                  v-model="type"
-                  :items="EVENT_TYPE_OPTIONS"
-                  label="Type"
-                  clearable
-                  hide-details
-                  density="compact"
-                  style="width: 190px"
-                />
+                <div class="d-flex flex-wrap ga-3">
+                  <v-text-field
+                    v-model="userSearch"
+                    placeholder="Search this user's actions…"
+                    prepend-inner-icon="mdi-magnify"
+                    clearable
+                    hide-details
+                    density="compact"
+                    style="width: 260px"
+                  />
+                  <v-select
+                    v-model="type"
+                    :items="EVENT_TYPE_OPTIONS"
+                    label="Type"
+                    clearable
+                    hide-details
+                    density="compact"
+                    style="width: 170px"
+                  />
+                </div>
               </template>
             </v-card-item>
             <EventTable

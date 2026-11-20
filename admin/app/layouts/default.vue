@@ -42,14 +42,6 @@ const isActive = (to: string) => (to === '/' ? route.path === '/' : route.path.s
 
 const displayName = computed(() => admin.value?.displayName || admin.value?.username || '')
 
-// Quick search: a phone number or name jumps to the Users page.
-const quick = ref('')
-function goSearch() {
-  const q = quick.value.trim()
-  if (!q) return
-  navigateTo({ path: '/users', query: { search: q } })
-  quick.value = ''
-}
 </script>
 
 <template>
@@ -106,19 +98,7 @@ function goSearch() {
 
   <v-app-bar flat class="topbar" height="68">
     <v-app-bar-nav-icon v-if="!mdAndUp" @click="drawer = !drawer" />
-    <v-text-field
-      v-model="quick"
-      placeholder="Find a user by phone number or name…"
-      prepend-inner-icon="mdi-magnify"
-      hide-details
-      single-line
-      density="compact"
-      variant="solo-filled"
-      flat
-      rounded="lg"
-      class="quick-search mx-2 mx-md-6"
-      @keydown.enter="goSearch"
-    />
+    <div class="mx-2 mx-md-6 flex-grow-1" style="max-width: 520px"><GlobalSearch /></div>
     <v-spacer />
     <div
       class="live-pill"
@@ -243,17 +223,15 @@ function goSearch() {
 }
 
 /* ── top bar ── */
+/* Let the search results drop down below the bar instead of being cut off. */
+.topbar,
+.topbar :deep(.v-toolbar__content) {
+  overflow: visible !important;
+}
 .topbar {
   background: rgba(var(--v-theme-background), 0.82) !important;
   backdrop-filter: blur(12px);
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.06) !important;
-}
-.quick-search {
-  max-width: 460px;
-}
-.v-theme--light .quick-search :deep(.v-field) {
-  background: #fff;
-  box-shadow: inset 0 0 0 1px rgba(17, 24, 39, 0.1);
 }
 .live-pill {
   display: inline-flex;

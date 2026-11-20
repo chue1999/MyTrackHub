@@ -54,6 +54,12 @@ const greeting = computed(() => {
   const h = new Date().getHours()
   return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'
 })
+// Local date as YYYY-MM-DD, for "failed today" links.
+const todayIso = (() => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+})()
+const failedTodayLink = `/events?result=failed&from=${todayIso}&to=${todayIso}`
 const todayLabel = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
 // ── daily trend ──
@@ -186,18 +192,26 @@ live.onEvents(({ events }) => {
             <span><v-icon icon="mdi-account-clock" size="16" /> {{ data.totals.activeToday }} active today</span>
             <span><v-icon icon="mdi-login" size="16" /> {{ data.totals.loginsToday }} logins</span>
             <span><v-icon icon="mdi-bank-transfer" size="16" /> {{ formatMoney(data.transfersToday.amount) }} transferred</span>
-            <NuxtLink v-if="data.totals.failedToday" to="/events" class="bad" title="See in the activity log">
+            <NuxtLink v-if="data.totals.failedToday" :to="failedTodayLink" class="bad" title="Show only today's failed actions">
               <v-icon icon="mdi-alert-circle" size="16" /> {{ data.totals.failedToday }} failed today
               <v-icon icon="mdi-arrow-right" size="14" />
             </NuxtLink>
           </div>
         </div>
         <div class="hero-actions">
-          <v-btn-toggle v-model="days" mandatory density="comfortable" divided rounded="lg" class="range">
-            <v-btn :value="7" class="text-none">7 days</v-btn>
-            <v-btn :value="14" class="text-none">14 days</v-btn>
-            <v-btn :value="30" class="text-none">30 days</v-btn>
-          </v-btn-toggle>
+          <div class="range" role="group" aria-label="Time range">
+            <button
+              v-for="d in [7, 14, 30]"
+              :key="d"
+              type="button"
+              class="range-btn"
+              :class="{ on: days === d }"
+              :aria-pressed="days === d"
+              @click="days = d"
+            >
+              {{ d }} days
+            </button>
+          </div>
           <v-btn icon="mdi-refresh" variant="flat" color="white" rounded="lg" :loading="pending" title="Refresh" @click="refresh()" />
         </div>
       </div>
@@ -257,8 +271,8 @@ live.onEvents(({ events }) => {
               {{ data.totals.failedToday }} action{{ data.totals.failedToday > 1 ? 's' : '' }} failed today. The latest are below. Click one to see what happened.
             </div>
           </div>
-          <v-btn to="/events" variant="flat" color="error" rounded="lg" class="text-none" append-icon="mdi-arrow-right">
-            All failures
+          <v-btn :to="failedTodayLink" variant="flat" color="error" rounded="lg" class="text-none" append-icon="mdi-arrow-right">
+            All {{ data.totals.failedToday }} failures
           </v-btn>
         </div>
         <div class="fail-list">
@@ -563,15 +577,36 @@ live.onEvents(({ events }) => {
   gap: 8px;
 }
 .range {
-  background: transparent !important;
+  display: flex;
+  gap: 8px;
 }
-.range :deep(.v-btn) {
-  background: rgba(255, 255, 255, 0.75) !important;
-  color: #1a1a1a !important;
+.range-btn {
+  padding: 9px 16px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #1a1a1a;
+  background: rgba(255, 255, 255, 0.75);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  transition: background 0.15s, color 0.15s, transform 0.1s;
+  cursor: pointer;
 }
-.range :deep(.v-btn--active) {
-  background: #1a1a1a !important;
-  color: #fff !important;
+.range-btn:hover {
+  background: #fff;
+}
+.range-btn:active {
+  transform: scale(0.97);
+}
+.range-btn.on {
+  background: #1a1a1a;
+  color: #fff;
+}
+.range-btn:focus-visible {
+  outline: 2px solid #1a1a1a;
+  outline-offset: 2px;
+}
+.hero-actions {
+  gap: 12px !important;
 }
 .feed-enter-active {
   transition: all 0.4s ease;

@@ -4,9 +4,17 @@ import type { Paged, TrackedEvent } from '~/composables/useApi'
 const api = useApi()
 
 // A link can open this page pre-filtered, e.g. /events?search=TransferBalance
-const initialSearch = String(useRoute().query.search || '')
+const route = useRoute()
+const initialSearch = String(route.query.search || '')
 const search = ref(initialSearch)
 const debounced = ref(initialSearch.trim())
+watch(
+  () => route.query.search,
+  (v) => {
+    const term = String(v || '')
+    if (term !== search.value) search.value = term
+  },
+)
 let timer: ReturnType<typeof setTimeout> | undefined
 watch(search, (v) => {
   clearTimeout(timer)
@@ -16,10 +24,42 @@ watch(search, (v) => {
   }, 350)
 })
 
-const type = ref<string | null>(null)
-const result = ref<'true' | 'false' | null>(null)
-const from = ref('')
-const to = ref('')
+// Filters can also come from the address, e.g. /events?result=failed&from=2026-11-20
+const resultFromQuery = (v: unknown) => (v === 'failed' ? 'false' : v === 'success' ? 'true' : null)
+const dateFromQuery = (v: unknown) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v ?? '')) ? String(v) : '')
+const type = ref<string | null>((route.query.type as string) || null)
+const result = ref<'true' | 'false' | null>(resultFromQuery(route.query.result))
+const from = ref(dateFromQuery(route.query.from))
+const to = ref(dateFromQuery(route.query.to))
+watch(
+  () => [route.query.result, route.query.from, route.query.to, route.query.type],
+  () => {
+    result.value = resultFromQuery(route.query.result)
+    from.value = dateFromQuery(route.query.from)
+    to.value = dateFromQuery(route.query.to)
+    type.value = (route.query.type as string) || null
+  },
+)
+const hasFilters = computed(() => !!(search.value || type.value || result.value || from.value || to.value))
+function clearFilters() {
+  search.value = ''
+  type.value = null
+  result.value = null
+  from.value = ''
+  to.value = ''
+  navigateTo('/events', { replace: true })
+}
+const filterText = computed(() => {
+  const parts: string[] = []
+  if (result.value === 'false') parts.push('failed actions only')
+  if (result.value === 'true') parts.push('successful actions only')
+  if (from.value && from.value === to.value) parts.push(`on ${from.value}`)
+  else {
+    if (from.value) parts.push(`from ${from.value}`)
+    if (to.value) parts.push(`until ${to.value}`)
+  }
+  return parts.join(', ')
+})
 const page = ref(1)
 const pageSize = ref(50)
 
@@ -110,8 +150,22 @@ function showMissed() {
             <v-text-field v-model="to" type="date" label="To" hide-details />
           </v-col>
         </v-row>
-        <div class="text-caption text-medium-emphasis mt-3">
-          {{ (data?.total ?? 0).toLocaleString() }} results
+        <div class="d-flex align-center flex-wrap ga-3 mt-3">
+          <div
+            v-if="result === 'false'"
+            class="filter-banner bad"
+          >
+            <v-icon icon="mdi-close-circle" size="18" />
+            Showing {{ filterText }} · {{ (data?.total ?? 0).toLocaleString() }} found
+          </div>
+          <div v-else-if="filterText" class="filter-banner">
+            <v-icon icon="mdi-filter-variant" size="18" />
+            Showing {{ filterText }} · {{ (data?.total ?? 0).toLocaleString() }} found
+          </div>
+          <span v-else class="text-caption text-medium-emphasis">{{ (data?.total ?? 0).toLocaleString() }} results</span>
+          <v-btn v-if="hasFilters" size="small" variant="text" class="text-none" prepend-icon="mdi-filter-remove-outline" @click="clearFilters">
+            Show all
+          </v-btn>
         </div>
       </v-card-text>
       <v-divider />
@@ -142,3 +196,20 @@ function showMissed() {
     </v-card>
   </div>
 </template>
+
+<style scoped>
+.filter-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+}
+.filter-banner.bad {
+  color: #c0392b;
+  background: rgba(217, 68, 58, 0.1);
+}
+</style>
