@@ -144,7 +144,8 @@ const otherProps = computed(() =>
           <pre class="json">{{ pretty(p.response) }}</pre>
         </template>
         <div v-if="isApi && !p.request && !p.response" class="text-caption text-medium-emphasis">
-          This call was recorded by an older version of the app, before request and response details were captured.
+          This call was recorded by an older version of the app, so it has no receiver, amount or result.
+          Fully restart the app (stop and run again, or Hot Restart) and repeat the action to see all details.
         </div>
       </v-card-text>
     </v-card>

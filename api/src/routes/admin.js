@@ -280,8 +280,20 @@ router.get('/stats/overview', async (req, res, next) => {
       { replacements: { since, today: startOfToday }, type: QueryTypes.SELECT },
     );
 
+    // API calls in the last 15 minutes from an app still running the old
+    // recorder (no request/response/result captured).
+    const outdatedRecent = await Event.count({
+      where: {
+        type: 'api',
+        success: null,
+        occurredAt: { [Op.gte]: new Date(Date.now() - 15 * 60_000) },
+        [Op.and]: sequelize.literal(`properties ? 'ok'`),
+      },
+    });
+
     res.json({
       totals: { totalUsers, newUsersToday, activeToday, eventsToday, loginsToday, failedToday },
+      outdatedRecent,
       logouts,
       byType,
       apiResults,

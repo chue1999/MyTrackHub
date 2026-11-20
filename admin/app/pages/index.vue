@@ -14,6 +14,7 @@ interface Transfer {
   lastName: string | null
 }
 interface Overview {
+  outdatedRecent: number
   logouts: { full: number; toPassword: number; fullToday: number; toPasswordToday: number }
   totals: {
     totalUsers: number
@@ -200,6 +201,21 @@ live.onEvents(({ events }) => {
           />
         </v-col>
       </v-row>
+
+      <v-alert
+        v-if="data.outdatedRecent"
+        type="warning"
+        variant="tonal"
+        icon="mdi-cellphone-arrow-down"
+        rounded="lg"
+        class="mt-4"
+      >
+        <div class="font-weight-bold">The app is still running an old version of the tracker</div>
+        <div class="text-body-2">
+          {{ data.outdatedRecent }} API calls in the last 15 minutes arrived without details (receiver, amount, result).
+          Fully restart the app: stop it and run it again, or press Hot Restart (Shift+Cmd+F5). Hot Reload is not enough.
+        </div>
+      </v-alert>
 
       <v-alert
         v-if="data.totals.failedToday"
