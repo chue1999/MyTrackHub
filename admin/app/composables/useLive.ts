@@ -43,6 +43,8 @@ export function useLive() {
       )
       source = es
       es.addEventListener('hello', () => (connected.value = true))
+      // The logo was changed on the Settings page: reload it everywhere.
+      es.addEventListener('branding', () => useBranding().load())
       es.addEventListener('events', (msg) => {
         const payload = JSON.parse((msg as MessageEvent).data) as LiveEventsPayload
         handlers.forEach((h) => h(payload))

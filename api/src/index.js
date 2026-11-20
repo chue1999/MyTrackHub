@@ -7,6 +7,7 @@ import { config } from './config.js';
 import { ensureDatabase, sequelize } from './db.js';
 import { Admin } from './models/index.js';
 import { scheduleRetention } from './retention.js';
+import { getBranding } from './branding.js';
 import adminRoutes from './routes/admin.js';
 import trackRoutes from './routes/track.js';
 
@@ -30,6 +31,20 @@ app.get('/health', async (_req, res) => {
     res.status(503).json({ ok: false });
   }
 });
+
+// Logo for the login page and the browser tab: public, no login needed.
+app.get(
+  '/api/public/branding',
+  cors({ origin: config.corsOrigins }),
+  async (_req, res, next) => {
+    try {
+      res.set('Cache-Control', 'no-cache');
+      res.json(await getBranding());
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 app.use('/api/v1/track', trackRoutes);
 app.use('/api/admin', adminRoutes);

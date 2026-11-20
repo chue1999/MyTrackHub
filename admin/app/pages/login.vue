@@ -46,7 +46,7 @@ const sample = [
 
         <div class="d-flex align-center ga-3">
           <div class="logo">
-            <v-icon icon="mdi-chart-timeline-variant" size="26" color="#F5B800" />
+            <BrandMark size="26" color="#F5B800" />
           </div>
           <div>
             <div class="text-h6 font-weight-black">MyTPlus</div>
@@ -94,7 +94,7 @@ const sample = [
         <div class="form-wrap">
           <div class="d-flex d-md-none align-center ga-3 mb-8">
             <div class="logo logo--dark">
-              <v-icon icon="mdi-chart-timeline-variant" size="24" color="black" />
+              <BrandMark size="24" />
             </div>
             <div class="text-h6 font-weight-black">MyTPlus Activity</div>
           </div>
@@ -226,6 +226,10 @@ const sample = [
   place-items: center;
   background: #1a1a1a;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+}
+.logo:has(img) {
+  background: #fff;
+  overflow: hidden;
 }
 .logo--dark {
   background: rgb(var(--v-theme-primary));

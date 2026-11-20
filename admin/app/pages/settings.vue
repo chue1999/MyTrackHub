@@ -103,19 +103,181 @@ async function runNow() {
     running.value = false
   }
 }
+
+// ── website logo ──
+const { branding, load: loadBranding } = useBranding()
+const defaultFavicon = DEFAULT_FAVICON
+const logoDraft = ref<string | null | undefined>(undefined) // undefined = no change
+const logoError = ref('')
+const logoSaving = ref(false)
+const fileInput = ref<HTMLInputElement | null>(null)
+const shownLogo = computed(() => (logoDraft.value === undefined ? branding.value.logo : logoDraft.value))
+const logoChanged = computed(() => logoDraft.value !== undefined && logoDraft.value !== branding.value.logo)
+
+function readAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(String(r.result))
+    r.onerror = () => reject(r.error)
+    r.readAsDataURL(file)
+  })
+}
+
+/** Fits the picture into a 256×256 square (keeps transparency), as PNG. */
+async function toSquarePng(src: string) {
+  const img = new Image()
+  img.src = src
+  await img.decode()
+  const size = 256
+  const canvas = document.createElement('canvas')
+  canvas.width = canvas.height = size
+  const ctx = canvas.getContext('2d')!
+  const scale = Math.min(size / img.naturalWidth, size / img.naturalHeight)
+  const w = img.naturalWidth * scale
+  const h = img.naturalHeight * scale
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h)
+  return canvas.toDataURL('image/png')
+}
+
+async function pickLogo(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  logoError.value = ''
+  if (!/^image\/(png|jpeg|webp|svg\+xml)$/.test(file.type)) {
+    logoError.value = 'Use a PNG, JPG, WEBP or SVG image'
+    return
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    logoError.value = 'The file is too big (max 5 MB)'
+    return
+  }
+  try {
+    const raw = await readAsDataUrl(file)
+    const data = file.type === 'image/svg+xml' ? raw : await toSquarePng(raw)
+    if (data.length > 700_000) {
+      logoError.value = 'This SVG is too big (max about 500 KB)'
+      return
+    }
+    logoDraft.value = data
+  } catch {
+    logoError.value = 'Could not read this image'
+  }
+}
+
+async function saveLogo() {
+  logoSaving.value = true
+  logoError.value = ''
+  try {
+    branding.value = await api('/settings/branding', { method: 'PUT', body: { logo: logoDraft.value ?? null } })
+    logoDraft.value = undefined
+    Object.assign(snack, { show: true, color: 'success', text: 'Logo saved: the browser icon is updated too' })
+  } catch (e: any) {
+    logoError.value = e?.data?.message || 'Could not save the logo'
+  } finally {
+    logoSaving.value = false
+  }
+}
+onMounted(loadBranding)
 </script>
 
 <template>
   <div>
     <div class="mb-6">
-      <h1 class="page-title">Log storage</h1>
-      <div class="text-body-2 text-medium-emphasis">How long the tracking system keeps its logs</div>
+      <h1 class="page-title">Settings</h1>
+      <div class="text-body-2 text-medium-emphasis">Website logo and how long the logs are kept</div>
     </div>
 
     <v-alert v-if="error" type="error" variant="tonal" rounded="lg" class="mb-4" :text="error" />
     <v-alert v-if="!canEdit" type="info" variant="tonal" rounded="lg" class="mb-4" icon="mdi-eye-outline">
       You can see these settings. Only administrators can change them.
     </v-alert>
+
+    <v-card class="bordered mb-6">
+      <div class="head">
+        <div class="head-icon"><v-icon icon="mdi-image-outline" size="26" /></div>
+        <div class="flex-grow-1">
+          <div class="text-h6 font-weight-black">Website logo</div>
+          <div class="text-body-2 text-medium-emphasis">Shown in the sidebar, on the login page and as the browser tab icon</div>
+        </div>
+      </div>
+
+      <v-divider />
+
+      <v-card-text class="pa-5">
+        <div class="logo-row">
+          <!-- upload box -->
+          <button type="button" class="drop" :disabled="!canEdit" @click="fileInput?.click()">
+            <div class="drop-preview" :class="{ custom: shownLogo }">
+              <img v-if="shownLogo" :src="shownLogo" alt="Logo preview" />
+              <v-icon v-else icon="mdi-chart-timeline-variant" size="44" color="black" />
+            </div>
+            <div v-if="canEdit" class="drop-text">
+              <v-icon icon="mdi-upload" size="18" /> {{ shownLogo ? 'Change logo' : 'Upload logo' }}
+            </div>
+          </button>
+          <input ref="fileInput" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden @change="pickLogo" />
+
+          <!-- where it appears -->
+          <div class="flex-grow-1">
+            <div class="label">Preview</div>
+            <div class="previews">
+              <div class="pv pv-tab">
+                <div class="tab">
+                  <span class="tab-icon"><img :src="shownLogo || defaultFavicon" alt="" /></span>
+                  <span class="tab-title">MyTPlus Activity</span>
+                  <v-icon icon="mdi-close" size="14" class="ml-auto" />
+                </div>
+                <div class="pv-cap">Browser tab</div>
+              </div>
+              <div class="pv pv-side">
+                <div class="side">
+                  <span class="side-logo" :class="{ custom: shownLogo }">
+                    <img v-if="shownLogo" :src="shownLogo" alt="" />
+                    <v-icon v-else icon="mdi-chart-timeline-variant" size="20" color="black" />
+                  </span>
+                  <span>
+                    <span class="side-name">MyTPlus</span>
+                    <span class="side-sub">Activity Center</span>
+                  </span>
+                </div>
+                <div class="pv-cap">Sidebar</div>
+              </div>
+            </div>
+            <div class="text-caption text-medium-emphasis mt-3">
+              PNG, JPG, WEBP or SVG. A square picture looks best; others are fitted into a square automatically.
+            </div>
+            <v-alert v-if="logoError" type="error" variant="tonal" density="compact" rounded="lg" class="mt-3" :text="logoError" />
+            <div v-if="branding.updatedBy" class="text-caption text-medium-emphasis mt-2">
+              Last changed by {{ branding.updatedBy }} {{ timeAgo(branding.updatedAt) }}
+            </div>
+          </div>
+        </div>
+      </v-card-text>
+
+      <template v-if="canEdit">
+        <v-divider />
+        <v-card-actions class="pa-4 ga-3 flex-wrap">
+          <v-btn
+            variant="text"
+            color="error"
+            class="text-none"
+            prepend-icon="mdi-restore"
+            :disabled="!shownLogo || logoSaving"
+            @click="logoDraft = null"
+          >
+            Use default logo
+          </v-btn>
+          <v-spacer />
+          <v-btn variant="text" class="text-none" :disabled="!logoChanged || logoSaving" @click="logoDraft = undefined">Cancel</v-btn>
+          <v-btn color="primary" variant="flat" class="text-none px-6" prepend-icon="mdi-content-save-outline" :loading="logoSaving" :disabled="!logoChanged" @click="saveLogo">
+            Save logo
+          </v-btn>
+        </v-card-actions>
+      </template>
+    </v-card>
 
     <v-card class="bordered" :loading="loading">
       <div class="head">
@@ -286,5 +448,124 @@ async function runNow() {
   padding: 10px 14px;
   border-radius: 12px;
   background: rgba(var(--v-theme-on-surface), 0.04);
+}
+.logo-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  align-items: flex-start;
+}
+.drop {
+  width: 180px;
+  padding: 18px;
+  border-radius: 18px;
+  border: 2px dashed rgba(var(--v-theme-on-surface), 0.18);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.drop:not(:disabled):hover {
+  border-color: #fcd021;
+  background: rgba(252, 208, 33, 0.08);
+}
+.drop:disabled {
+  cursor: default;
+}
+.drop-preview {
+  width: 112px;
+  height: 112px;
+  border-radius: 26px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: linear-gradient(135deg, #fcd021, #ffb300);
+  box-shadow: 0 8px 22px rgba(252, 208, 33, 0.3);
+}
+.drop-preview.custom,
+.side-logo.custom {
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+}
+.drop-preview img,
+.side-logo img,
+.tab-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.drop-text {
+  font-size: 0.85rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.previews {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.pv-cap {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+  margin-top: 6px;
+}
+.tab {
+  width: 240px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 10px 10px 0 0;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+  box-shadow: inset 0 -2px 0 rgba(var(--v-theme-on-surface), 0.1);
+  font-size: 0.8rem;
+}
+.tab-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.tab-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.side {
+  width: 220px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #16161a;
+  color: #fff;
+}
+.side-logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #fcd021, #ffb300);
+}
+.side-name {
+  display: block;
+  font-weight: 800;
+  font-size: 0.95rem;
+}
+.side-sub {
+  display: block;
+  font-size: 0.72rem;
+  opacity: 0.6;
 }
 </style>

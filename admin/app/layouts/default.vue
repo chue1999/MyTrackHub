@@ -1,4 +1,5 @@
 <script setup lang="ts">
+const { branding } = useBranding()
 import { useDisplay, useTheme } from 'vuetify'
 
 const { admin, logout } = useAuth()
@@ -37,7 +38,7 @@ const nav = computed(() => [
   { title: 'Reports', icon: 'mdi-file-chart-outline', activeIcon: 'mdi-file-chart', to: '/reports' },
 ])
 const adminNav = computed(() => [
-  { title: 'Log storage', icon: 'mdi-delete-clock-outline', activeIcon: 'mdi-delete-clock', to: '/settings' },
+  { title: 'Settings', icon: 'mdi-cog-outline', activeIcon: 'mdi-cog', to: '/settings' },
   ...(admin.value?.role === 'admin'
     ? [{ title: 'Admin accounts', icon: 'mdi-shield-account-outline', activeIcon: 'mdi-shield-account', to: '/accounts' }]
     : []),
@@ -51,8 +52,8 @@ const displayName = computed(() => admin.value?.displayName || admin.value?.user
 <template>
   <v-navigation-drawer v-model="drawer" :permanent="mdAndUp" width="260" class="sidebar" theme="dark">
     <div class="brand">
-      <div class="brand-logo">
-        <v-icon icon="mdi-chart-timeline-variant" size="24" color="black" />
+      <div class="brand-logo" :class="{ custom: branding.logo }">
+        <BrandMark size="24" />
       </div>
       <div>
         <div class="brand-name">MyTPlus</div>
@@ -150,6 +151,10 @@ const displayName = computed(() => admin.value?.displayName || admin.value?.user
   place-items: center;
   background: linear-gradient(135deg, #fcd021, #ffb300);
   box-shadow: 0 6px 18px rgba(252, 208, 33, 0.25);
+}
+.brand-logo.custom {
+  background: #fff;
+  overflow: hidden;
 }
 .brand-name {
   font-weight: 800;

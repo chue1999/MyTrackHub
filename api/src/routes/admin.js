@@ -6,7 +6,8 @@ import { z } from 'zod';
 import { sequelize } from '../db.js';
 import { Admin, AppUser, Event, EVENT_TYPES } from '../models/index.js';
 import { requireAdmin, signAdminToken } from '../middleware/auth.js';
-import { createTicket, liveClientCount, streamHandler } from '../live.js';
+import { broadcast, createTicket, liveClientCount, streamHandler } from '../live.js';
+import { getBranding, LOGO_MAX_CHARS, LOGO_PATTERN, saveBranding } from '../branding.js';
 import { countOlderThan, cutoffFor, getRetention, RETENTION_MONTHS, runRetention, saveRetention } from '../retention.js';
 
 const router = Router();
@@ -712,6 +713,36 @@ router.post('/settings/retention/run', requireRoleAdmin, async (req, res, next) 
   try {
     const run = await runRetention({ force: true, by: req.me.username });
     res.json(await retentionInfo(run.settings));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── settings: website logo ───────────────────────────────────────────
+
+const brandingSchema = z.object({
+  logo: z
+    .string()
+    .max(LOGO_MAX_CHARS, 'The logo file is too big (max about 500 KB)')
+    .regex(LOGO_PATTERN, 'Use a PNG, JPG, WEBP or SVG image')
+    .nullable(),
+});
+
+router.put('/settings/branding', requireRoleAdmin, async (req, res, next) => {
+  try {
+    const { logo } = brandingSchema.parse(req.body);
+    const saved = await saveBranding({ logo, updatedAt: new Date().toISOString(), updatedBy: req.me.username });
+    // Every open admin page swaps the logo and the browser icon right away.
+    broadcast('branding', { updatedAt: saved.updatedAt });
+    res.json(saved);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/settings/branding', async (_req, res, next) => {
+  try {
+    res.json(await getBranding());
   } catch (err) {
     next(err);
   }
