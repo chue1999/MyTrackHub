@@ -71,15 +71,22 @@ async function copy(label: string, v: unknown) {
   } catch {}
 }
 
+const hasPayload = computed(() => !!(p.value.request || p.value.response))
+const oldFormat = computed(() => isApi.value && !hasPayload.value && e.value?.success == null)
+const tone = computed(() => status.value?.tone ?? (oldFormat.value ? 'old' : 'neutral'))
+const headIcon = computed(() => status.value?.icon ?? (e.value ? EVENT_META[e.value.type]?.icon : 'mdi-help'))
+
 useHead(() => ({ title: e.value ? `${eventTitle(e.value)} · MyTPlus Activity` : 'Action · MyTPlus Activity' }))
 </script>
 
 <template>
-  <div>
-    <!-- back -->
-    <div class="d-flex align-center ga-3 mb-5">
-      <v-btn variant="tonal" rounded="lg" prepend-icon="mdi-arrow-left" class="text-none" @click="goBack">Back</v-btn>
-      <div class="text-body-2 text-medium-emphasis">
+  <div class="detail">
+    <!-- back + breadcrumb -->
+    <div class="d-flex align-center flex-wrap ga-3 mb-5">
+      <v-btn variant="flat" color="surface" rounded="lg" prepend-icon="mdi-arrow-left" class="text-none back-btn" @click="goBack">
+        Back
+      </v-btn>
+      <div class="crumbs">
         <NuxtLink to="/events" class="crumb">Activity log</NuxtLink>
         <v-icon icon="mdi-chevron-right" size="16" />
         <span>Action #{{ id }}</span>
@@ -98,55 +105,92 @@ useHead(() => ({ title: e.value ? `${eventTitle(e.value)} · MyTPlus Activity` :
 
     <template v-else-if="e">
       <!-- header -->
-      <section class="head" :class="status?.tone ?? 'neutral'">
-        <div class="head-icon">
-          <v-icon :icon="status?.icon ?? EVENT_META[e.type]?.icon" size="34" />
-        </div>
+      <section class="head" :class="tone">
+        <div class="head-glow" />
+        <div class="head-icon"><v-icon :icon="headIcon" size="32" /></div>
         <div class="flex-grow-1" style="min-width: 0">
           <div class="head-type">{{ EVENT_META[e.type]?.label }}</div>
           <h1 class="head-title">{{ eventTitle(e) }}</h1>
-          <div v-if="isApi && apiSummaryLine(e)" class="head-summary">{{ apiSummaryLine(e) }}</div>
+          <div class="head-meta">
+            <span v-if="isApi && apiSummaryLine(e)" class="pill strong">{{ apiSummaryLine(e) }}</span>
+            <span class="pill"><v-icon icon="mdi-clock-outline" size="15" /> {{ formatTime(e.occurredAt) }} · {{ timeAgo(e.occurredAt) }}</span>
+            <span v-if="p.ms != null" class="pill"><v-icon icon="mdi-timer-outline" size="15" /> {{ p.ms }} ms</span>
+          </div>
         </div>
-        <div v-if="status" class="head-status">
-          <v-icon :icon="status.icon" size="20" />
-          {{ status.text }}
+        <div class="head-status">
+          <v-icon :icon="status?.icon ?? (oldFormat ? 'mdi-help-circle-outline' : 'mdi-information-outline')" size="20" />
+          {{ status?.text ?? (oldFormat ? 'Result not recorded' : EVENT_META[e.type]?.label) }}
         </div>
       </section>
 
-      <v-row class="mt-1">
-        <!-- main column -->
-        <v-col cols="12" lg="8">
-          <!-- server answer -->
-          <v-card v-if="e.result" class="bordered mb-4">
-            <div class="answer" :class="e.success === false ? 'bad' : 'ok'">
-              <v-icon :icon="e.success === false ? 'mdi-message-alert-outline' : 'mdi-message-check-outline'" size="26" />
-              <div>
-                <div class="text-caption font-weight-bold text-uppercase" style="letter-spacing: 0.05em; opacity: 0.75">Server answer</div>
-                <div class="text-h6 font-weight-bold">{{ e.result }}</div>
-              </div>
-            </div>
-          </v-card>
+      <!-- old app note (small) -->
+      <div v-if="oldFormat" class="old-note">
+        <v-icon icon="mdi-cellphone-arrow-down" size="18" />
+        <span>Recorded by an older version of the app, so there is no receiver, amount or result. Fully restart the app and repeat the action to see everything.</span>
+      </div>
 
-          <!-- business summary -->
-          <v-card v-if="summary.length" class="bordered mb-4">
-            <v-card-item prepend-icon="mdi-swap-horizontal">
-              <v-card-title class="font-weight-bold">Summary</v-card-title>
-            </v-card-item>
-            <div class="facts">
-              <div v-for="row in summary" :key="row.label" class="fact">
-                <v-icon :icon="row.icon" size="22" class="text-medium-emphasis" />
-                <div>
-                  <div class="text-caption text-medium-emphasis">{{ row.label }}</div>
-                  <div :class="row.strong ? 'text-h5 font-weight-black' : 'text-body-1 font-weight-medium'">{{ row.value }}</div>
-                </div>
-              </div>
-            </div>
-          </v-card>
+      <!-- three key cards -->
+      <div class="key-grid">
+        <v-card class="bordered key">
+          <div class="key-label"><v-icon icon="mdi-calendar-clock" size="18" /> When</div>
+          <div class="key-big text-mono">{{ formatTime(e.occurredAt) }}</div>
+          <div class="key-sub">{{ formatDateLong(e.occurredAt) }}</div>
+          <div v-if="delaySec != null && delaySec > 5" class="key-note">
+            Reached the server {{ delaySec }} s later (phone was probably offline)
+          </div>
+        </v-card>
 
-          <!-- sent / received -->
-          <v-card v-if="p.request" class="bordered mb-4">
+        <v-card class="bordered key">
+          <div class="key-label"><v-icon icon="mdi-account-outline" size="18" /> Who</div>
+          <div class="d-flex align-center ga-3 mt-1">
+            <v-avatar color="primary" size="48">
+              <span class="font-weight-black text-black">{{ initials(e.user) }}</span>
+            </v-avatar>
+            <div class="flex-grow-1" style="min-width: 0">
+              <div class="key-name text-truncate">{{ e.user ? fullName(e.user) : 'Not logged in' }}</div>
+              <div class="key-sub text-mono">{{ formatPhone(e.user?.msisdn ?? e.msisdn) }}</div>
+            </div>
+          </div>
+          <v-btn v-if="e.user" :to="`/users/${e.user.id}`" variant="tonal" size="small" rounded="lg" class="text-none mt-3" append-icon="mdi-arrow-right">
+            Open user
+          </v-btn>
+        </v-card>
+
+        <v-card class="bordered key" :class="`result-${tone}`">
+          <div class="key-label"><v-icon icon="mdi-flag-outline" size="18" /> Result</div>
+          <div class="key-big result-text">
+            <v-icon :icon="status?.icon ?? 'mdi-minus-circle-outline'" size="28" />
+            {{ status?.text ?? (isApi ? 'Not recorded' : 'Done') }}
+          </div>
+          <div class="key-sub">
+            {{ e.result || (p.status ? `HTTP ${p.status}${p.resultCode != null ? ` · code ${p.resultCode}` : ''}` : (e.type === 'logout' ? logoutReason(p.reason) : '—')) }}
+          </div>
+        </v-card>
+      </div>
+
+      <!-- summary -->
+      <v-card v-if="summary.length" class="bordered mt-4">
+        <v-card-item prepend-icon="mdi-swap-horizontal">
+          <v-card-title class="font-weight-bold">Summary</v-card-title>
+        </v-card-item>
+        <div class="facts">
+          <div v-for="row in summary" :key="row.label" class="fact">
+            <v-icon :icon="row.icon" size="24" class="text-medium-emphasis" />
+            <div>
+              <div class="fact-label">{{ row.label }}</div>
+              <div :class="row.strong ? 'fact-big' : 'fact-value'">{{ row.value }}</div>
+            </div>
+          </div>
+        </div>
+      </v-card>
+
+      <!-- sent / received side by side -->
+      <v-row v-if="hasPayload" class="mt-1">
+        <v-col v-if="p.request" cols="12" :lg="p.response ? 6 : 12">
+          <v-card class="bordered h-100">
             <v-card-item prepend-icon="mdi-upload-outline">
-              <v-card-title class="font-weight-bold">Sent: what the user asked for</v-card-title>
+              <v-card-title class="font-weight-bold">Sent</v-card-title>
+              <v-card-subtitle>What the user asked for</v-card-subtitle>
               <template #append>
                 <v-btn size="small" variant="text" class="text-none" :prepend-icon="copied === 'sent' ? 'mdi-check' : 'mdi-content-copy'" @click="copy('sent', p.request)">
                   {{ copied === 'sent' ? 'Copied' : 'Copy' }}
@@ -155,9 +199,12 @@ useHead(() => ({ title: e.value ? `${eventTitle(e.value)} · MyTPlus Activity` :
             </v-card-item>
             <v-card-text><pre class="json">{{ pretty(p.request) }}</pre></v-card-text>
           </v-card>
-          <v-card v-if="p.response" class="bordered mb-4">
+        </v-col>
+        <v-col v-if="p.response" cols="12" :lg="p.request ? 6 : 12">
+          <v-card class="bordered h-100">
             <v-card-item prepend-icon="mdi-download-outline">
-              <v-card-title class="font-weight-bold">Received: what they got</v-card-title>
+              <v-card-title class="font-weight-bold">Received</v-card-title>
+              <v-card-subtitle>What they got back</v-card-subtitle>
               <template #append>
                 <v-btn size="small" variant="text" class="text-none" :prepend-icon="copied === 'received' ? 'mdi-check' : 'mdi-content-copy'" @click="copy('received', p.response)">
                   {{ copied === 'received' ? 'Copied' : 'Copy' }}
@@ -166,58 +213,11 @@ useHead(() => ({ title: e.value ? `${eventTitle(e.value)} · MyTPlus Activity` :
             </v-card-item>
             <v-card-text><pre class="json">{{ pretty(p.response) }}</pre></v-card-text>
           </v-card>
-
-          <v-alert v-if="isApi && !p.request && !p.response" type="info" variant="tonal" rounded="lg" icon="mdi-cellphone-arrow-down">
-            This call was recorded by an older version of the app, so it has no receiver, amount or result.
-            Fully restart the app and repeat the action to see all details.
-          </v-alert>
-        </v-col>
-
-        <!-- side column -->
-        <v-col cols="12" lg="4">
-          <!-- when -->
-          <v-card class="bordered mb-4">
-            <div class="when">
-              <v-icon icon="mdi-clock-outline" size="26" class="text-medium-emphasis" />
-              <div class="flex-grow-1">
-                <div class="text-caption text-medium-emphasis">Time</div>
-                <div class="text-h4 font-weight-black text-mono">{{ formatTime(e.occurredAt) }}</div>
-                <div class="text-body-2">{{ formatDateLong(e.occurredAt) }}</div>
-              </div>
-            </div>
-            <v-divider />
-            <div class="pa-4 d-flex align-center ga-2 text-body-2">
-              <v-chip size="small" variant="tonal" prepend-icon="mdi-history">{{ timeAgo(e.occurredAt) }}</v-chip>
-              <span v-if="delaySec != null && delaySec > 5" class="text-medium-emphasis">
-                reached the server {{ delaySec }} s later (phone was probably offline)
-              </span>
-            </div>
-          </v-card>
-
-          <!-- who -->
-          <v-card class="bordered mb-4">
-            <v-card-item prepend-icon="mdi-account-outline">
-              <v-card-title class="font-weight-bold">User</v-card-title>
-            </v-card-item>
-            <div class="px-4 pb-4 d-flex align-center ga-3">
-              <v-avatar color="primary" size="46">
-                <span class="font-weight-black text-black">{{ initials(e.user) }}</span>
-              </v-avatar>
-              <div class="flex-grow-1" style="min-width: 0">
-                <div class="font-weight-bold text-truncate">{{ e.user ? fullName(e.user) : 'Not logged in' }}</div>
-                <div class="text-mono text-body-2 text-medium-emphasis">{{ formatPhone(e.user?.msisdn ?? e.msisdn) }}</div>
-              </div>
-              <v-btn v-if="e.user" :to="`/users/${e.user.id}`" variant="tonal" size="small" class="text-none" append-icon="mdi-arrow-right">
-                Open
-              </v-btn>
-            </div>
-          </v-card>
-
         </v-col>
       </v-row>
 
       <!-- technical details: full width, large -->
-      <v-card class="bordered mt-2">
+      <v-card class="bordered mt-4">
         <v-card-item prepend-icon="mdi-information-outline">
           <v-card-title class="font-weight-bold">Technical details</v-card-title>
         </v-card-item>
@@ -233,6 +233,16 @@ useHead(() => ({ title: e.value ? `${eventTitle(e.value)} · MyTPlus Activity` :
 </template>
 
 <style scoped>
+.back-btn {
+  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.06), inset 0 0 0 1px rgba(17, 24, 39, 0.08);
+}
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.9rem;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+}
 .crumb {
   color: inherit;
   text-decoration: none;
@@ -240,27 +250,38 @@ useHead(() => ({ title: e.value ? `${eventTitle(e.value)} · MyTPlus Activity` :
 .crumb:hover {
   text-decoration: underline;
 }
+
+/* header */
 .head {
+  position: relative;
+  overflow: hidden;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 18px;
-  padding: 22px 24px;
-  border-radius: 20px;
+  padding: 24px 26px;
+  border-radius: 22px;
   color: #fff;
 }
-.head.ok {
-  background: linear-gradient(120deg, #1f9d55, #27b866);
-}
-.head.bad {
-  background: linear-gradient(120deg, #c93b32, #e2574c);
-}
-.head.neutral {
-  background: linear-gradient(120deg, #2b2b30, #3a3a42);
+.head.ok { background: linear-gradient(120deg, #178a49, #2bbd6a); }
+.head.bad { background: linear-gradient(120deg, #b8322a, #e65a4f); }
+.head.neutral { background: linear-gradient(120deg, #2a2a30, #44444e); }
+.head.old { background: linear-gradient(120deg, #4b5563, #6b7280); }
+.head-glow {
+  position: absolute;
+  right: -100px;
+  top: -140px;
+  width: 380px;
+  height: 380px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.22), transparent 65%);
+  pointer-events: none;
 }
 .head-icon {
-  width: 60px;
-  height: 60px;
-  border-radius: 16px;
+  position: relative;
+  width: 62px;
+  height: 62px;
+  border-radius: 18px;
   display: grid;
   place-items: center;
   background: rgba(255, 255, 255, 0.18);
@@ -270,81 +291,147 @@ useHead(() => ({ title: e.value ? `${eventTitle(e.value)} · MyTPlus Activity` :
   font-size: 0.78rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.07em;
   opacity: 0.8;
 }
 .head-title {
-  font-size: 1.7rem;
+  font-size: 1.8rem;
   font-weight: 900;
   letter-spacing: -0.02em;
   line-height: 1.2;
+  word-break: break-word;
 }
-.head-summary {
-  display: inline-block;
-  margin-top: 6px;
-  padding: 4px 10px;
-  border-radius: 8px;
-  font-weight: 700;
-  background: rgba(255, 255, 255, 0.18);
+.head-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
 }
-.head-status {
+.pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 14px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.16);
+}
+.pill.strong {
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.26);
+}
+.head-status {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
   border-radius: 999px;
   font-weight: 800;
   background: #fff;
   color: #1a1a1a;
 }
-.head.ok .head-status {
-  color: #1d8a4a;
-}
-.head.bad .head-status {
-  color: #c0392b;
-}
-.answer {
+.head.ok .head-status { color: #1d8a4a; }
+.head.bad .head-status { color: #c0392b; }
+.head.old .head-status { color: #4b5563; }
+
+.old-note {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 0.88rem;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+  background: rgba(var(--v-theme-on-surface), 0.05);
+}
+
+/* three key cards */
+.key-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+.key {
   padding: 18px 20px;
 }
-.answer.bad {
-  color: #c0392b;
-  background: rgba(217, 68, 58, 0.08);
+.key-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+  margin-bottom: 8px;
 }
-.answer.ok {
-  color: #1d8a4a;
-  background: rgba(46, 158, 91, 0.08);
+.key-big {
+  font-size: 2rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
 }
+.key-name {
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+.key-sub {
+  font-size: 0.95rem;
+  color: rgba(var(--v-theme-on-surface), 0.65);
+  margin-top: 2px;
+}
+.key-note {
+  margin-top: 8px;
+  font-size: 0.8rem;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+}
+.result-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.result-ok .result-text { color: #1d8a4a; }
+.result-bad .result-text { color: #c0392b; }
+.result-old .result-text,
+.result-neutral .result-text { color: rgba(var(--v-theme-on-surface), 0.6); font-size: 1.5rem; }
+
+/* summary */
 .facts {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
   gap: 12px;
   padding: 0 16px 16px;
 }
-.fact > div {
-  min-width: 0;
-}
-.fact .text-h5 {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .fact {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px 16px;
+  padding: 16px 18px;
   border-radius: 14px;
   background: rgba(var(--v-theme-on-surface), 0.04);
 }
-.when {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 18px 18px;
+.fact > div { min-width: 0; }
+.fact-label {
+  font-size: 0.82rem;
+  color: rgba(var(--v-theme-on-surface), 0.6);
 }
+.fact-big {
+  font-size: 1.5rem;
+  font-weight: 900;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fact-value {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+/* technical */
 .tech-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -357,13 +444,9 @@ useHead(() => ({ title: e.value ? `${eventTitle(e.value)} · MyTPlus Activity` :
   background: rgba(var(--v-theme-on-surface), 0.04);
   min-width: 0;
 }
-.tech-item.wide {
-  grid-column: span 2;
-}
+.tech-item.wide { grid-column: span 2; }
 @media (max-width: 600px) {
-  .tech-item.wide {
-    grid-column: auto;
-  }
+  .tech-item.wide { grid-column: auto; }
 }
 .tech-label {
   display: flex;
@@ -379,17 +462,14 @@ useHead(() => ({ title: e.value ? `${eventTitle(e.value)} · MyTPlus Activity` :
   font-weight: 700;
   word-break: break-word;
 }
-.tech-value.mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-.tech-value.small {
-  font-size: 0.95rem;
-}
+.tech-value.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.tech-value.small { font-size: 0.95rem; }
+
 .json {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12.5px;
   line-height: 1.5;
-  max-height: 420px;
+  max-height: 460px;
   overflow: auto;
   padding: 14px 16px;
   margin: 0;
