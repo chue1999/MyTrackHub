@@ -31,11 +31,12 @@ interface PackageStats {
 }
 
 const api = useApi()
-const days = ref(30)
+const range = ref(lastDays(30))
+const periodText = computed(() => rangeText(range.value))
 const { data, pending, error, refresh } = await useAsyncData(
   'package-stats',
-  () => api<PackageStats>('/stats/packages', { query: { days: days.value } }),
-  { watch: [days] },
+  () => api<PackageStats>('/stats/packages', { query: { from: rangeIso(range.value.from), to: rangeIso(range.value.to, true) } }),
+  { watch: [range] },
 )
 const refreshSoon = debounce(() => refresh(), 1500)
 useLive().onEvents(({ events }) => {
@@ -111,11 +112,7 @@ const purchaseHeaders = [
         <div class="text-body-2 text-medium-emphasis">Packages bought in the app, revenue, and data left on users' packages</div>
       </div>
       <v-spacer />
-      <div class="range">
-        <button v-for="d in [7, 30, 90]" :key="d" type="button" class="range-btn" :class="{ on: days === d }" @click="days = d">
-          {{ d }} days
-        </button>
-      </div>
+      <DateRange v-model="range" />
       <v-btn icon="mdi-refresh" variant="text" :loading="pending" @click="refresh()" />
     </div>
 
@@ -125,7 +122,7 @@ const purchaseHeaders = [
       <!-- headline numbers -->
       <v-row>
         <v-col cols="12" sm="6" lg>
-          <StatCard title="Packages sold" :value="data.totals.sold" icon="mdi-package-variant-closed" :hint="`${data.today.sold} today · last ${data.days} days`" />
+          <StatCard title="Packages sold" :value="data.totals.sold" icon="mdi-package-variant-closed" :hint="`${data.today.sold} today · ${periodText}`" />
         </v-col>
         <v-col cols="12" sm="6" lg>
           <StatCard title="Revenue" :value="formatMoney(data.totals.revenue)" icon="mdi-cash-multiple" color="success" :hint="`${formatMoney(data.today.revenue)} today`" />
@@ -150,7 +147,7 @@ const purchaseHeaders = [
       <v-card class="bordered mt-4">
         <v-card-item prepend-icon="mdi-chart-bar">
           <v-card-title class="font-weight-bold">{{ metric === 'revenue' ? 'Revenue per day' : 'Packages sold per day' }}</v-card-title>
-          <v-card-subtitle>Last {{ data.days }} days</v-card-subtitle>
+          <v-card-subtitle>{{ periodText }}</v-card-subtitle>
           <template #append>
             <v-chip-group v-model="metric" mandatory selected-class="text-primary">
               <v-chip value="revenue" filter variant="outlined">Revenue (₭)</v-chip>
@@ -257,7 +254,7 @@ const purchaseHeaders = [
             <span v-else class="text-medium-emphasis">—</span>
           </template>
           <template #no-data>
-            <div class="py-8 text-medium-emphasis">No purchases in the last {{ data.days }} days</div>
+            <div class="py-8 text-medium-emphasis">No purchases in the {{ periodText }}</div>
           </template>
         </v-data-table>
       </v-card>

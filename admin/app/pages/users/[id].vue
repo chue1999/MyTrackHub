@@ -18,6 +18,7 @@ const { data: detail, error, refresh: refreshDetail } = await useAsyncData(`user
 
 const type = ref<string | null>(null)
 const userFeature = ref<string | null>(null)
+const userRange = ref({ from: '', to: '' })
 const userSearch = ref('')
 const userSearchDebounced = ref('')
 let usTimer: ReturnType<typeof setTimeout> | undefined
@@ -39,20 +40,31 @@ const { data: events, pending } = await useAsyncData(
         type: type.value || undefined,
         search: userSearchDebounced.value || undefined,
         apis: userFeature.value ? Object.keys(FEATURE_BY_KEY[userFeature.value]!.apis).join(',') : undefined,
+        from: rangeIso(userRange.value.from),
+        to: rangeIso(userRange.value.to, true),
         page: page.value,
         pageSize: pageSize.value,
       },
     }),
-  { watch: [type, userSearchDebounced, userFeature, page, pageSize] },
+  { watch: [type, userSearchDebounced, userFeature, userRange, page, pageSize] },
 )
 watch(type, () => (page.value = 1))
 
 
 // ── features this user used ──
-const { data: featureUsage } = await useAsyncData(`user-features-${id.value}`, () =>
-  api<{ apis: { name: string; uses: number; succeeded: number; failed: number; lastAt: string }[] }>('/stats/features', {
-    query: { userId: id.value, days: 365 },
-  }),
+const { data: featureUsage } = await useAsyncData(
+  `user-features-${id.value}`,
+  () =>
+    api<{ apis: { name: string; uses: number; succeeded: number; failed: number; lastAt: string }[] }>('/stats/features', {
+      query: {
+        userId: id.value,
+        // follows the activity date range; without one, the last year
+        ...(userRange.value.from || userRange.value.to
+          ? { from: rangeIso(userRange.value.from), to: rangeIso(userRange.value.to, true) }
+          : { days: 365 }),
+      },
+    }),
+  { watch: [userRange] },
 )
 const userFeatures = computed(() => {
   const map = new Map<string, { key: string; label: string; icon: string; uses: number; failed: number; lastAt: string }>()
@@ -303,6 +315,7 @@ useLive().onEvents(({ user, events: incoming }) => {
                   >
                     {{ FEATURE_BY_KEY[userFeature]!.label }}
                   </v-chip>
+                  <DateRange v-model="userRange" clearable dense />
                   <v-text-field
                     v-model="userSearch"
                     placeholder="Search this user's actions…"

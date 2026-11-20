@@ -32,6 +32,32 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Digits of a phone search without the 856 / leading 0 prefix: "020 5555 1234" → "2055551234". */
 const searchDigits = (s) => String(s).replace(/\D/g, '').replace(/^856/, '').replace(/^0+/, '');
 
+/**
+ * The period a request asks for: ?from=…&to=… (any date-time) or, without
+ * them, the last ?days= days. Returned dates are inclusive bounds.
+ */
+function period(query, defaultDays) {
+  const parse = (v) => {
+    if (!v) return null;
+    const d = new Date(String(v));
+    return Number.isNaN(+d) ? null : d;
+  };
+  let until = parse(query.to) || new Date();
+  let since = parse(query.from);
+  if (!since) {
+    const days = Math.min(366, Math.max(1, Number.parseInt(query.days, 10) || defaultDays));
+    since = new Date();
+    since.setHours(0, 0, 0, 0);
+    since.setDate(since.getDate() - (days - 1));
+  }
+  if (since > until) [since, until] = [until, since];
+  // Keep charts reasonable: at most ~1 year per request.
+  const maxMs = 366 * 86_400_000;
+  if (until - since > maxMs) since = new Date(until.getTime() - maxMs);
+  const days = Math.max(1, Math.ceil((until - since) / 86_400_000));
+  return { since, until, days };
+}
+
 const like = (s) => `%${String(s).replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
 
 // ── auth ─────────────────────────────────────────────────────────────
@@ -176,11 +202,9 @@ router.post('/auth/password', async (req, res, next) => {
 /** GET /stats/overview?days=14 — headline numbers, daily chart, top screens/taps. */
 router.get('/stats/overview', async (req, res, next) => {
   try {
-    const days = Math.min(90, Math.max(1, Number.parseInt(req.query.days, 10) || 14));
+    const { since, until } = period(req.query, 14);
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
-    const since = new Date(startOfToday);
-    since.setDate(since.getDate() - (days - 1));
 
     const [totalUsers, newUsersToday, eventsToday, loginsToday, activeToday, failedToday] = await Promise.all([
       AppUser.count(),
@@ -200,22 +224,22 @@ router.get('/stats/overview', async (req, res, next) => {
               COALESCE(COUNT(DISTINCT e.user_id), 0)::int AS "activeUsers",
               COALESCE(COUNT(e.id), 0)::int AS events,
               COALESCE(COUNT(e.id) FILTER (WHERE e.type = 'login'), 0)::int AS logins
-         FROM generate_series(:since::date, CURRENT_DATE, interval '1 day') AS d(day)
+         FROM generate_series(:since::date, :until::date, interval '1 day') AS d(day)
          LEFT JOIN events e ON e.occurred_at >= d.day AND e.occurred_at < d.day + interval '1 day'
         GROUP BY d.day
         ORDER BY d.day`,
-      { replacements: { since }, type: QueryTypes.SELECT },
+      { replacements: { since, until }, type: QueryTypes.SELECT },
     );
 
     const top = (type) =>
       sequelize.query(
         `SELECT name, COUNT(*)::int AS count, COUNT(DISTINCT user_id)::int AS users
            FROM events
-          WHERE type = :type AND occurred_at >= :since
+          WHERE type = :type AND occurred_at BETWEEN :since AND :until
           GROUP BY name
           ORDER BY count DESC
           LIMIT 10`,
-        { replacements: { type, since }, type: QueryTypes.SELECT },
+        { replacements: { type, since, until }, type: QueryTypes.SELECT },
       );
     const [topScreens, topTaps] = await Promise.all([top('screen_view'), top('tap')]);
     const topApis = await sequelize.query(
@@ -224,18 +248,18 @@ router.get('/stats/overview', async (req, res, next) => {
               COUNT(*) FILTER (WHERE success IS TRUE)::int AS succeeded,
               COUNT(*) FILTER (WHERE success IS FALSE)::int AS failed
          FROM events
-        WHERE type = 'api' AND occurred_at >= :since
+        WHERE type = 'api' AND occurred_at BETWEEN :since AND :until
         GROUP BY name
         ORDER BY count DESC
         LIMIT 10`,
-      { replacements: { since }, type: QueryTypes.SELECT },
+      { replacements: { since, until }, type: QueryTypes.SELECT },
     );
 
     // What users do, by type (pie chart).
     const byType = await sequelize.query(
       `SELECT type, COUNT(*)::int AS count FROM events
-        WHERE occurred_at >= :since GROUP BY type ORDER BY count DESC`,
-      { replacements: { since }, type: QueryTypes.SELECT },
+        WHERE occurred_at BETWEEN :since AND :until GROUP BY type ORDER BY count DESC`,
+      { replacements: { since, until }, type: QueryTypes.SELECT },
     );
 
     // API results (pie chart).
@@ -243,8 +267,8 @@ router.get('/stats/overview', async (req, res, next) => {
       `SELECT COUNT(*) FILTER (WHERE success IS TRUE)::int AS success,
               COUNT(*) FILTER (WHERE success IS FALSE)::int AS failed,
               COUNT(*) FILTER (WHERE success IS NULL)::int AS unknown
-         FROM events WHERE type = 'api' AND occurred_at >= :since`,
-      { replacements: { since }, type: QueryTypes.SELECT },
+         FROM events WHERE type = 'api' AND occurred_at BETWEEN :since AND :until`,
+      { replacements: { since, until }, type: QueryTypes.SELECT },
     );
 
     // Money transfers: receiver and amount come from the recorded request.
@@ -264,10 +288,10 @@ router.get('/stats/overview', async (req, res, next) => {
               ${amountSql}::float AS amount,
               u.id AS "userId", u.msisdn, u.first_name AS "firstName", u.last_name AS "lastName"
          FROM events e LEFT JOIN app_users u ON u.id = e.user_id
-        WHERE e.type = 'api' AND e.name LIKE '%/TransferBalance' AND e.occurred_at >= :since
+        WHERE e.type = 'api' AND e.name LIKE '%/TransferBalance' AND e.occurred_at BETWEEN :since AND :until
         ORDER BY e.occurred_at DESC
         LIMIT 10`,
-      { replacements: { since }, type: QueryTypes.SELECT },
+      { replacements: { since, until }, type: QueryTypes.SELECT },
     );
 
     // Two kinds of logout: full (back to phone number) vs locked (back to password).
@@ -276,8 +300,8 @@ router.get('/stats/overview', async (req, res, next) => {
               COUNT(*) FILTER (WHERE name = 'logout_to_password')::int AS "toPassword",
               COUNT(*) FILTER (WHERE name IN ('logout', 'logout_full') AND occurred_at >= :today)::int AS "fullToday",
               COUNT(*) FILTER (WHERE name = 'logout_to_password' AND occurred_at >= :today)::int AS "toPasswordToday"
-         FROM events WHERE type = 'logout' AND occurred_at >= :since`,
-      { replacements: { since, today: startOfToday }, type: QueryTypes.SELECT },
+         FROM events WHERE type = 'logout' AND occurred_at BETWEEN :since AND :until`,
+      { replacements: { since, until, today: startOfToday }, type: QueryTypes.SELECT },
     );
 
     // API calls in the last 15 minutes from an app still running the old
@@ -327,11 +351,9 @@ router.get('/stats/overview', async (req, res, next) => {
  */
 router.get('/stats/packages', async (req, res, next) => {
   try {
-    const days = Math.min(365, Math.max(1, Number.parseInt(req.query.days, 10) || 30));
+    const { since, until, days } = period(req.query, 30);
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
-    const since = new Date(startOfToday);
-    since.setDate(since.getDate() - (days - 1));
 
     // One row per purchase attempt, with the useful fields pulled out.
     const base = `
@@ -352,10 +374,10 @@ router.get('/stats/packages', async (req, res, next) => {
                e.properties->'purchase'->>'forNumber' AS for_number,
                NULLIF(regexp_replace(COALESCE(e.properties->'purchase'->>'price', ''), '[^0-9.]', '', 'g'), '')::numeric AS price
           FROM events e
-         WHERE e.type = 'api' AND e.name LIKE '%RegisterPackage%' AND e.occurred_at >= :since
+         WHERE e.type = 'api' AND e.name LIKE '%RegisterPackage%' AND e.occurred_at BETWEEN :since AND :until
       )`;
     const q = (sql, extra = {}) =>
-      sequelize.query(`${base} ${sql}`, { replacements: { since, today: startOfToday, ...extra }, type: QueryTypes.SELECT });
+      sequelize.query(`${base} ${sql}`, { replacements: { since, until, today: startOfToday, ...extra }, type: QueryTypes.SELECT });
 
     const [[totals], [today], byChannel, topPackages, daily, recent] = await Promise.all([
       q(`SELECT COUNT(*) FILTER (WHERE success IS TRUE)::int AS sold,
@@ -383,10 +405,10 @@ router.get('/stats/packages', async (req, res, next) => {
          SELECT to_char(d.day, 'YYYY-MM-DD') AS date,
                 COUNT(p.id) FILTER (WHERE p.success IS TRUE)::int AS sold,
                 COALESCE(SUM(p.price) FILTER (WHERE p.success IS TRUE), 0)::float AS revenue
-           FROM generate_series(:since::date, CURRENT_DATE, interval '1 day') AS d(day)
+           FROM generate_series(:since::date, :until::date, interval '1 day') AS d(day)
            LEFT JOIN p ON p.occurred_at >= d.day AND p.occurred_at < d.day + interval '1 day'
           GROUP BY d.day ORDER BY d.day`,
-        { replacements: { since }, type: QueryTypes.SELECT },
+        { replacements: { since, until }, type: QueryTypes.SELECT },
       ),
       q(`SELECT p.id::text AS id, p.occurred_at AS "occurredAt", p.success, p.result, p.channel, p.code,
                 p.name, p.net, p.duration, p.price::float AS price, p.for_whom AS "forWhom", p.for_number AS "forNumber",
@@ -437,10 +459,7 @@ router.get('/stats/packages', async (req, res, next) => {
  */
 router.get('/stats/features', async (req, res, next) => {
   try {
-    const days = Math.min(365, Math.max(1, Number.parseInt(req.query.days, 10) || 30));
-    const since = new Date();
-    since.setHours(0, 0, 0, 0);
-    since.setDate(since.getDate() - (days - 1));
+    const { since, until, days } = period(req.query, 30);
     const userId = req.query.userId && UUID.test(req.query.userId) ? req.query.userId : null;
     const rows = await sequelize.query(
       `SELECT name,
@@ -450,9 +469,9 @@ router.get('/stats/features', async (req, res, next) => {
               COUNT(DISTINCT user_id)::int AS users,
               MAX(occurred_at) AS "lastAt"
          FROM events
-        WHERE type = 'api' AND occurred_at >= :since ${userId ? 'AND user_id = :userId' : ''}
+        WHERE type = 'api' AND occurred_at BETWEEN :since AND :until ${userId ? 'AND user_id = :userId' : ''}
         GROUP BY name`,
-      { replacements: { since, userId }, type: QueryTypes.SELECT },
+      { replacements: { since, until, userId }, type: QueryTypes.SELECT },
     );
     res.json({ days, apis: rows });
   } catch (err) {
@@ -484,6 +503,19 @@ router.get('/users', async (req, res, next) => {
     };
     const sort = sortable[req.query.sort] || sortable.lastSeenAt;
 
+    // With ?from=&to=: only users active in that period, counted within it.
+    const hasRange = !!(req.query.from || req.query.to);
+    const { since, until } = period(req.query, 3650);
+    const inRange = hasRange
+      ? ` AND e.occurred_at BETWEEN ${sequelize.escape(since.toISOString())} AND ${sequelize.escape(until.toISOString())}`
+      : '';
+    if (hasRange) {
+      where[Op.and] = [
+        ...(where[Op.and] || []),
+        sequelize.literal(`EXISTS (SELECT 1 FROM events e WHERE e.user_id = "AppUser"."id"${inRange})`),
+      ];
+    }
+
     const { rows, count } = await AppUser.findAndCountAll({
       where,
       order: [sort],
@@ -492,8 +524,8 @@ router.get('/users', async (req, res, next) => {
       attributes: {
         exclude: ['activePackages'],
         include: [
-          [sequelize.literal('(SELECT COUNT(*)::int FROM events e WHERE e.user_id = "AppUser"."id")'), 'actionCount'],
-          [sequelize.literal('(SELECT COUNT(*)::int FROM events e WHERE e.user_id = "AppUser"."id" AND e.success IS FALSE)'), 'failedCount'],
+          [sequelize.literal(`(SELECT COUNT(*)::int FROM events e WHERE e.user_id = "AppUser"."id"${inRange})`), 'actionCount'],
+          [sequelize.literal(`(SELECT COUNT(*)::int FROM events e WHERE e.user_id = "AppUser"."id" AND e.success IS FALSE${inRange})`), 'failedCount'],
           [sequelize.literal(`COALESCE(jsonb_array_length("AppUser"."active_packages"), 0)`), 'packageCount'],
         ],
       },

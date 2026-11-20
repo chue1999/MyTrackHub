@@ -28,15 +28,25 @@ watch(
 
 const page = ref(1)
 const pageSize = ref(20)
+// Only users who did something in this period (empty = everyone).
+const range = ref({ from: '', to: '' })
+watch(range, () => (page.value = 1))
 const sort = ref<'lastSeenAt' | 'loginCount' | 'firstSeenAt' | 'dataRemainMb'>('lastSeenAt')
 
 const { data, pending, error, refresh } = await useAsyncData(
   'users',
   () =>
     api<Paged<AppUser>>('/users', {
-      query: { search: debounced.value, page: page.value, pageSize: pageSize.value, sort: sort.value },
+      query: {
+        search: debounced.value,
+        page: page.value,
+        pageSize: pageSize.value,
+        sort: sort.value,
+        from: rangeIso(range.value.from),
+        to: rangeIso(range.value.to, true),
+      },
     }),
-  { watch: [debounced, page, pageSize, sort] },
+  { watch: [debounced, page, pageSize, sort, range] },
 )
 
 const headers = [
@@ -78,6 +88,7 @@ function onOptions(o: { page: number; itemsPerPage: number }) {
           style="min-width: 260px"
           class="flex-grow-1"
         />
+        <DateRange v-model="range" clearable />
         <v-select
           v-model="sort"
           :items="[

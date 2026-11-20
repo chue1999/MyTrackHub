@@ -304,3 +304,31 @@ export const CHANNEL_META: Record<string, { label: string; icon: string; color: 
   roaming: { label: 'Roaming package', icon: 'mdi-airplane', color: 'var(--series-3)' },
   lucky_wheel: { label: 'Lucky wheel prize (free)', icon: 'mdi-ferris-wheel', color: 'var(--series-4)' },
 }
+
+/** Local 'YYYY-MM-DDTHH:mm' (or 'YYYY-MM-DD') → ISO for the API; '' → undefined. */
+export function rangeIso(v: string | undefined | null, end = false) {
+  if (!v) return undefined
+  const s = /^\d{4}-\d{2}-\d{2}$/.test(v) ? `${v}T${end ? '23:59:59' : '00:00:00'}` : end ? `${v}:59` : v
+  const d = new Date(s)
+  return Number.isNaN(+d) ? undefined : d.toISOString()
+}
+
+/** Range for "last N days" in the picker's format. */
+export function lastDays(n: number) {
+  const pad = (x: number) => String(x).padStart(2, '0')
+  const f = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  const start = new Date()
+  start.setDate(start.getDate() - (n - 1))
+  start.setHours(0, 0, 0, 0)
+  const end = new Date()
+  end.setHours(23, 59, 0, 0)
+  return { from: f(start), to: f(end) }
+}
+
+/** Short text for a chosen range, e.g. "20 Nov 08:00 – 21 Nov 17:30". */
+export function rangeText(r: { from: string; to: string }) {
+  const f = (v: string) => new Date(v).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+  if (!r.from && !r.to) return 'all time'
+  if (r.from && r.to) return `${f(r.from)} – ${f(r.to)}`
+  return r.from ? `from ${f(r.from)}` : `until ${f(r.to)}`
+}

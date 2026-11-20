@@ -9,11 +9,12 @@ interface ApiUsage {
 }
 
 const api = useApi()
-const days = ref(30)
+const range = ref(lastDays(30))
+const periodText = computed(() => rangeText(range.value))
 const { data, pending, error, refresh } = await useAsyncData(
   'feature-usage',
-  () => api<{ days: number; apis: ApiUsage[] }>('/stats/features', { query: { days: days.value } }),
-  { watch: [days] },
+  () => api<{ days: number; apis: ApiUsage[] }>('/stats/features', { query: { from: rangeIso(range.value.from), to: rangeIso(range.value.to, true) } }),
+  { watch: [range] },
 )
 const refreshSoon = debounce(() => refresh(), 2000)
 useLive().onEvents(({ events }) => {
@@ -87,11 +88,7 @@ const open = (r: FeatureRow, failedOnly = false) =>
         </div>
       </div>
       <v-spacer />
-      <div class="range">
-        <button v-for="d in [7, 30, 90]" :key="d" type="button" class="range-btn" :class="{ on: days === d }" @click="days = d">
-          {{ d }} days
-        </button>
-      </div>
+      <DateRange v-model="range" />
       <v-btn icon="mdi-refresh" variant="text" :loading="pending" @click="refresh()" />
     </div>
 
@@ -103,7 +100,7 @@ const open = (r: FeatureRow, failedOnly = false) =>
           <StatCard title="Features used" :value="`${used.filter((r) => r.key !== 'other').length} / ${FEATURES.length}`" icon="mdi-apps" />
         </v-col>
         <v-col cols="12" sm="4">
-          <StatCard title="Actions" :value="totals.uses" icon="mdi-lightning-bolt" color="info" :hint="`last ${data.days} days`" />
+          <StatCard title="Actions" :value="totals.uses" icon="mdi-lightning-bolt" color="info" :hint="`${periodText}`" />
         </v-col>
         <v-col cols="12" sm="4">
           <StatCard title="Failed" :value="totals.failed" icon="mdi-close-circle-outline" color="error" />
@@ -155,7 +152,7 @@ const open = (r: FeatureRow, failedOnly = false) =>
 
       <template v-if="unused.length">
         <div class="section-title mt-8 mb-3">
-          <v-icon icon="mdi-sleep" size="18" /> Not used in the last {{ data.days }} days
+          <v-icon icon="mdi-sleep" size="18" /> Not used in this period ({{ periodText }})
         </div>
         <div class="unused">
           <div v-for="r in unused" :key="r.key" class="unused-item">

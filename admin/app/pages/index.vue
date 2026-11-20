@@ -36,11 +36,13 @@ interface Overview {
 }
 
 const api = useApi()
-const days = ref(14)
+// Start / end date-time for every chart and list on this page.
+const range = ref(lastDays(14))
+const days = computed(() => rangeText(range.value))
 const { data, pending, error, refresh } = await useAsyncData(
   'overview',
-  () => api<Overview>('/stats/overview', { query: { days: days.value } }),
-  { watch: [days] },
+  () => api<Overview>('/stats/overview', { query: { from: rangeIso(range.value.from), to: rangeIso(range.value.to, true) } }),
+  { watch: [range] },
 )
 
 // ── today vs yesterday (from the daily series) ──
@@ -199,19 +201,7 @@ live.onEvents(({ events }) => {
           </div>
         </div>
         <div class="hero-actions">
-          <div class="range" role="group" aria-label="Time range">
-            <button
-              v-for="d in [7, 14, 30]"
-              :key="d"
-              type="button"
-              class="range-btn"
-              :class="{ on: days === d }"
-              :aria-pressed="days === d"
-              @click="days = d"
-            >
-              {{ d }} days
-            </button>
-          </div>
+          <DateRange v-model="range" />
           <v-btn icon="mdi-refresh" variant="flat" color="white" rounded="lg" :loading="pending" title="Refresh" @click="refresh()" />
         </div>
       </div>
@@ -298,7 +288,7 @@ live.onEvents(({ events }) => {
       <v-card class="bordered mt-4">
         <v-card-item>
           <v-card-title class="font-weight-bold">Daily trend</v-card-title>
-          <v-card-subtitle>Number of {{ METRIC_LABEL[metric] }} per day · last {{ days }} days</v-card-subtitle>
+          <v-card-subtitle>Number of {{ METRIC_LABEL[metric] }} per day · {{ days }}</v-card-subtitle>
           <template #append>
             <v-chip-group v-model="metric" mandatory selected-class="text-primary">
               <v-chip value="activeUsers" filter variant="outlined">Active users</v-chip>
@@ -316,7 +306,7 @@ live.onEvents(({ events }) => {
       <v-card class="bordered mt-4">
         <v-card-item prepend-icon="mdi-logout-variant">
           <v-card-title class="font-weight-bold">Logouts</v-card-title>
-          <v-card-subtitle>How users left the app · {{ days }} days</v-card-subtitle>
+          <v-card-subtitle>How users left the app · {{ days }}</v-card-subtitle>
         </v-card-item>
         <v-card-text>
           <SplitBar :parts="logoutParts" empty-text="No logouts yet" :height="52" />
@@ -329,7 +319,7 @@ live.onEvents(({ events }) => {
           <v-card class="bordered h-100">
             <v-card-item prepend-icon="mdi-chart-donut">
               <v-card-title class="font-weight-bold">What users do</v-card-title>
-              <v-card-subtitle>All actions by type · {{ days }} days</v-card-subtitle>
+              <v-card-subtitle>All actions by type · {{ days }}</v-card-subtitle>
             </v-card-item>
             <v-card-text>
               <Pie3D :slices="typeSlices" total-label="actions" :width="230" />
@@ -340,7 +330,7 @@ live.onEvents(({ events }) => {
           <v-card class="bordered h-100">
             <v-card-item prepend-icon="mdi-chart-pie">
               <v-card-title class="font-weight-bold">API results</v-card-title>
-              <v-card-subtitle>Did the app's requests work? · {{ days }} days</v-card-subtitle>
+              <v-card-subtitle>Did the app's requests work? · {{ days }}</v-card-subtitle>
             </v-card-item>
             <v-card-text>
               <Pie3D :slices="resultSlices" total-label="API calls" :width="230" />
@@ -445,7 +435,7 @@ live.onEvents(({ events }) => {
             </span>
           </template>
           <template #no-data>
-            <div class="py-8 text-medium-emphasis">No transfers in the last {{ days }} days</div>
+            <div class="py-8 text-medium-emphasis">No transfers in this period ({{ days }})</div>
           </template>
         </v-data-table>
       </v-card>
@@ -456,7 +446,7 @@ live.onEvents(({ events }) => {
           <v-card class="bordered h-100">
             <v-card-item prepend-icon="mdi-api">
               <v-card-title class="font-weight-bold">Most used features (APIs)</v-card-title>
-              <v-card-subtitle>Calls per feature, split by result · {{ days }} days</v-card-subtitle>
+              <v-card-subtitle>Calls per feature, split by result · {{ days }}</v-card-subtitle>
             </v-card-item>
             <v-card-text>
               <HBarChart
@@ -475,7 +465,7 @@ live.onEvents(({ events }) => {
           <v-card class="bordered mb-4">
             <v-card-item prepend-icon="mdi-cellphone-screenshot">
               <v-card-title class="font-weight-bold">Most opened screens</v-card-title>
-              <v-card-subtitle>Times opened · {{ days }} days</v-card-subtitle>
+              <v-card-subtitle>Times opened · {{ days }}</v-card-subtitle>
             </v-card-item>
             <v-card-text>
               <HBarChart :rows="screenRows" empty-text="No screens yet" />
@@ -484,7 +474,7 @@ live.onEvents(({ events }) => {
           <v-card class="bordered">
             <v-card-item prepend-icon="mdi-gesture-tap">
               <v-card-title class="font-weight-bold">Most tapped buttons</v-card-title>
-              <v-card-subtitle>Times tapped · {{ days }} days</v-card-subtitle>
+              <v-card-subtitle>Times tapped · {{ days }}</v-card-subtitle>
             </v-card-item>
             <v-card-text>
               <HBarChart :rows="tapRows" empty-text="No taps yet" />

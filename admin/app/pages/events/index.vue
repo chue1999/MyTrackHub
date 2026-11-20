@@ -26,11 +26,25 @@ watch(search, (v) => {
 
 // Filters can also come from the address, e.g. /events?result=failed&from=2026-11-20
 const resultFromQuery = (v: unknown) => (v === 'failed' ? 'false' : v === 'success' ? 'true' : null)
-const dateFromQuery = (v: unknown) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v ?? '')) ? String(v) : '')
+// Accepts '2026-11-20' (whole day) or '2026-11-20T08:30' from the address.
+const dateFromQuery = (v: unknown, end = false) => {
+  const t = String(v ?? '')
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return `${t}T${end ? '23:59' : '00:00'}`
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(t)) return t.slice(0, 16)
+  return ''
+}
 const type = ref<string | null>((route.query.type as string) || null)
 const result = ref<'true' | 'false' | null>(resultFromQuery(route.query.result))
 const from = ref(dateFromQuery(route.query.from))
-const to = ref(dateFromQuery(route.query.to))
+const to = ref(dateFromQuery(route.query.to, true))
+// The start / end picker edits from + to together.
+const range = computed({
+  get: () => ({ from: from.value, to: to.value }),
+  set: (r) => {
+    from.value = r.from
+    to.value = r.to
+  },
+})
 const feature = ref<string | null>(FEATURE_BY_KEY[String(route.query.feature)] ? String(route.query.feature) : null)
 const FEATURE_OPTIONS = FEATURES.map((f) => ({ title: f.label, value: f.key, props: { prependIcon: f.icon } }))
 watch(
@@ -39,7 +53,7 @@ watch(
     feature.value = FEATURE_BY_KEY[String(route.query.feature)] ? String(route.query.feature) : null
     result.value = resultFromQuery(route.query.result)
     from.value = dateFromQuery(route.query.from)
-    to.value = dateFromQuery(route.query.to)
+    to.value = dateFromQuery(route.query.to, true)
     type.value = (route.query.type as string) || null
   },
 )
@@ -58,11 +72,7 @@ const filterText = computed(() => {
   if (feature.value) parts.push(FEATURE_BY_KEY[feature.value]!.label)
   if (result.value === 'false') parts.push('failed actions only')
   if (result.value === 'true') parts.push('successful actions only')
-  if (from.value && from.value === to.value) parts.push(`on ${from.value}`)
-  else {
-    if (from.value) parts.push(`from ${from.value}`)
-    if (to.value) parts.push(`until ${to.value}`)
-  }
+  if (from.value || to.value) parts.push(rangeText({ from: from.value, to: to.value }))
   return parts.join(', ')
 })
 const page = ref(1)
@@ -77,8 +87,8 @@ const { data, pending, error, refresh } = await useAsyncData(
         type: type.value || undefined,
         success: result.value || undefined,
         apis: feature.value ? Object.keys(FEATURE_BY_KEY[feature.value]!.apis).join(',') : undefined,
-        from: from.value ? new Date(`${from.value}T00:00:00`).toISOString() : undefined,
-        to: to.value ? new Date(`${to.value}T23:59:59`).toISOString() : undefined,
+        from: rangeIso(from.value),
+        to: rangeIso(to.value, true),
         page: page.value,
         pageSize: pageSize.value,
       },
@@ -159,11 +169,8 @@ function showMissed() {
               hide-details
             />
           </v-col>
-          <v-col cols="6" md="3">
-            <v-text-field v-model="from" type="date" label="From" hide-details />
-          </v-col>
-          <v-col cols="6" md="3">
-            <v-text-field v-model="to" type="date" label="To" hide-details />
+          <v-col cols="12" md="6">
+            <DateRange v-model="range" clearable />
           </v-col>
         </v-row>
         <div class="d-flex align-center flex-wrap ga-3 mt-3">
