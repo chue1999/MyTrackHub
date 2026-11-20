@@ -82,7 +82,11 @@ const p = (e: TrackedEvent) => e.properties as Record<string, any>
           <div style="min-width: 0">
             <div class="text-body-2 font-weight-bold">{{ eventTitle(item) }}</div>
             <div class="text-caption text-medium-emphasis text-truncate" style="max-width: 280px">
-              {{ EVENT_META[item.type]?.label }}<template v-if="item.screen && item.type !== 'screen_view'"> · {{ screenLabel(item.screen) }}</template>
+              <span v-if="featureOf(item)" class="feature-tag">
+                <v-icon :icon="featureOf(item)!.icon" size="13" />{{ featureOf(item)!.label }}
+              </span>
+              <template v-else>{{ EVENT_META[item.type]?.label }}</template>
+              <template v-if="item.screen && item.type !== 'screen_view'"> · {{ screenLabel(item.screen) }}</template>
             </div>
           </div>
         </div>
@@ -152,6 +156,16 @@ const p = (e: TrackedEvent) => e.properties as Record<string, any>
   font-size: 0.72rem !important;
   letter-spacing: 0.04em;
   color: rgba(var(--v-theme-on-surface), 0.6) !important;
+}
+.feature-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-weight: 700;
+  color: #8a5a00;
+}
+.v-theme--dark .feature-tag {
+  color: #fcd021;
 }
 .summary {
   display: inline-block;

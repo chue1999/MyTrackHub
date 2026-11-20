@@ -32,6 +32,7 @@ const nav = computed(() => [
   { title: 'Dashboard', icon: 'mdi-view-dashboard-outline', activeIcon: 'mdi-view-dashboard', to: '/' },
   { title: 'Users', icon: 'mdi-account-group-outline', activeIcon: 'mdi-account-group', to: '/users' },
   { title: 'Activity log', icon: 'mdi-timeline-text-outline', activeIcon: 'mdi-timeline-text', to: '/events' },
+  { title: 'App features', icon: 'mdi-apps', activeIcon: 'mdi-apps', to: '/features' },
   { title: 'Packages', icon: 'mdi-package-variant', activeIcon: 'mdi-package-variant-closed', to: '/packages' },
 ])
 const adminNav = computed(() =>

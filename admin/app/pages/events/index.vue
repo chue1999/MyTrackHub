@@ -31,17 +31,21 @@ const type = ref<string | null>((route.query.type as string) || null)
 const result = ref<'true' | 'false' | null>(resultFromQuery(route.query.result))
 const from = ref(dateFromQuery(route.query.from))
 const to = ref(dateFromQuery(route.query.to))
+const feature = ref<string | null>(FEATURE_BY_KEY[String(route.query.feature)] ? String(route.query.feature) : null)
+const FEATURE_OPTIONS = FEATURES.map((f) => ({ title: f.label, value: f.key, props: { prependIcon: f.icon } }))
 watch(
-  () => [route.query.result, route.query.from, route.query.to, route.query.type],
+  () => [route.query.result, route.query.from, route.query.to, route.query.type, route.query.feature],
   () => {
+    feature.value = FEATURE_BY_KEY[String(route.query.feature)] ? String(route.query.feature) : null
     result.value = resultFromQuery(route.query.result)
     from.value = dateFromQuery(route.query.from)
     to.value = dateFromQuery(route.query.to)
     type.value = (route.query.type as string) || null
   },
 )
-const hasFilters = computed(() => !!(search.value || type.value || result.value || from.value || to.value))
+const hasFilters = computed(() => !!(search.value || type.value || result.value || from.value || to.value || feature.value))
 function clearFilters() {
+  feature.value = null
   search.value = ''
   type.value = null
   result.value = null
@@ -51,6 +55,7 @@ function clearFilters() {
 }
 const filterText = computed(() => {
   const parts: string[] = []
+  if (feature.value) parts.push(FEATURE_BY_KEY[feature.value]!.label)
   if (result.value === 'false') parts.push('failed actions only')
   if (result.value === 'true') parts.push('successful actions only')
   if (from.value && from.value === to.value) parts.push(`on ${from.value}`)
@@ -71,21 +76,22 @@ const { data, pending, error, refresh } = await useAsyncData(
         search: debounced.value || undefined,
         type: type.value || undefined,
         success: result.value || undefined,
+        apis: feature.value ? Object.keys(FEATURE_BY_KEY[feature.value]!.apis).join(',') : undefined,
         from: from.value ? new Date(`${from.value}T00:00:00`).toISOString() : undefined,
         to: to.value ? new Date(`${to.value}T23:59:59`).toISOString() : undefined,
         page: page.value,
         pageSize: pageSize.value,
       },
     }),
-  { watch: [debounced, type, result, from, to, page, pageSize] },
+  { watch: [debounced, type, result, feature, from, to, page, pageSize] },
 )
-watch([type, result, from, to], () => (page.value = 1))
+watch([type, result, feature, from, to], () => (page.value = 1))
 
 
 const missed = ref(0)
 watch([debounced, type, result, from, to, page], () => (missed.value = 0))
 useLive().onEvents(({ events }) => {
-  const filtered = !!(debounced.value || type.value || result.value || from.value || to.value)
+  const filtered = !!(debounced.value || type.value || result.value || feature.value || from.value || to.value)
   if (!data.value || page.value !== 1 || filtered) {
     missed.value += events.length
     return
@@ -119,7 +125,7 @@ function showMissed() {
     <v-card class="bordered">
       <v-card-text>
         <v-row dense>
-          <v-col cols="12" md="3">
+          <v-col cols="12" md="6">
             <v-text-field
               v-model="search"
               placeholder="Screen, API, message or phone"
@@ -128,10 +134,20 @@ function showMissed() {
               hide-details
             />
           </v-col>
-          <v-col cols="12" sm="4" md="3">
+          <v-col cols="12" md="6">
+            <v-select
+              v-model="feature"
+              :items="FEATURE_OPTIONS"
+              label="Feature"
+              prepend-inner-icon="mdi-apps"
+              clearable
+              hide-details
+            />
+          </v-col>
+          <v-col cols="12" sm="6" md="3">
             <v-select v-model="type" :items="EVENT_TYPE_OPTIONS" label="Type" clearable hide-details />
           </v-col>
-          <v-col cols="12" sm="4" md="2">
+          <v-col cols="12" sm="6" md="3">
             <v-select
               v-model="result"
               :items="[
@@ -143,10 +159,10 @@ function showMissed() {
               hide-details
             />
           </v-col>
-          <v-col cols="6" sm="4" md="2">
+          <v-col cols="6" md="3">
             <v-text-field v-model="from" type="date" label="From" hide-details />
           </v-col>
-          <v-col cols="6" sm="4" md="2">
+          <v-col cols="6" md="3">
             <v-text-field v-model="to" type="date" label="To" hide-details />
           </v-col>
         </v-row>

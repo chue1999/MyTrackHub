@@ -17,6 +17,7 @@ const { data: detail, error, refresh: refreshDetail } = await useAsyncData(`user
 )
 
 const type = ref<string | null>(null)
+const userFeature = ref<string | null>(null)
 const userSearch = ref('')
 const userSearchDebounced = ref('')
 let usTimer: ReturnType<typeof setTimeout> | undefined
@@ -37,14 +38,39 @@ const { data: events, pending } = await useAsyncData(
         userId: id.value,
         type: type.value || undefined,
         search: userSearchDebounced.value || undefined,
+        apis: userFeature.value ? Object.keys(FEATURE_BY_KEY[userFeature.value]!.apis).join(',') : undefined,
         page: page.value,
         pageSize: pageSize.value,
       },
     }),
-  { watch: [type, userSearchDebounced, page, pageSize] },
+  { watch: [type, userSearchDebounced, userFeature, page, pageSize] },
 )
 watch(type, () => (page.value = 1))
 
+
+// ── features this user used ──
+const { data: featureUsage } = await useAsyncData(`user-features-${id.value}`, () =>
+  api<{ apis: { name: string; uses: number; succeeded: number; failed: number; lastAt: string }[] }>('/stats/features', {
+    query: { userId: id.value, days: 365 },
+  }),
+)
+const userFeatures = computed(() => {
+  const map = new Map<string, { key: string; label: string; icon: string; uses: number; failed: number; lastAt: string }>()
+  for (const a of featureUsage.value?.apis ?? []) {
+    const f = lookupApi(a.name)?.feature
+    const key = f?.key ?? 'other'
+    const row = map.get(key) ?? { key, label: f?.label ?? 'Other', icon: f?.icon ?? 'mdi-dots-horizontal', uses: 0, failed: 0, lastAt: a.lastAt }
+    row.uses += a.uses
+    row.failed += a.failed
+    if (a.lastAt > row.lastAt) row.lastAt = a.lastAt
+    map.set(key, row)
+  }
+  return [...map.values()].sort((a, b) => b.uses - a.uses)
+})
+function filterFeature(key: string) {
+  userFeature.value = userFeature.value === key || key === 'other' ? null : key
+  page.value = 1
+}
 
 // ── edit user ──
 const { admin: me } = useAuth()
@@ -170,6 +196,29 @@ useLive().onEvents(({ user, events: incoming }) => {
           </v-row>
 
           <v-card class="bordered mt-3">
+            <v-card-item prepend-icon="mdi-apps">
+              <v-card-title class="text-subtitle-1 font-weight-bold">Features used</v-card-title>
+              <v-card-subtitle>Click one to see only those actions</v-card-subtitle>
+            </v-card-item>
+            <div class="uf-list">
+              <button
+                v-for="f in userFeatures"
+                :key="f.key"
+                type="button"
+                class="uf-item"
+                :class="{ on: userFeature === f.key }"
+                @click="filterFeature(f.key)"
+              >
+                <v-icon :icon="f.icon" size="18" />
+                <span class="flex-grow-1 text-left text-truncate">{{ f.label }}</span>
+                <span v-if="f.failed" class="text-error font-weight-bold">{{ f.failed }} ✕</span>
+                <strong>{{ f.uses }}</strong>
+              </button>
+              <div v-if="!userFeatures.length" class="text-body-2 text-medium-emphasis pa-2">No app features used yet</div>
+            </div>
+          </v-card>
+
+          <v-card class="bordered mt-3">
             <v-card-item prepend-icon="mdi-package-variant">
               <v-card-title class="text-subtitle-1 font-weight-bold">Packages &amp; data</v-card-title>
               <v-card-subtitle v-if="detail.user.packagesUpdatedAt">Checked {{ timeAgo(detail.user.packagesUpdatedAt) }} in the app</v-card-subtitle>
@@ -243,7 +292,17 @@ useLive().onEvents(({ user, events: incoming }) => {
               <v-card-title class="font-weight-bold">Activity</v-card-title>
               <v-card-subtitle>{{ (events?.total ?? 0).toLocaleString() }} actions, newest first</v-card-subtitle>
               <template #append>
-                <div class="d-flex flex-wrap ga-3">
+                <div class="d-flex flex-wrap align-center ga-3">
+                  <v-chip
+                    v-if="userFeature"
+                    closable
+                    color="primary"
+                    variant="tonal"
+                    :prepend-icon="FEATURE_BY_KEY[userFeature]!.icon"
+                    @click:close="userFeature = null"
+                  >
+                    {{ FEATURE_BY_KEY[userFeature]!.label }}
+                  </v-chip>
                   <v-text-field
                     v-model="userSearch"
                     placeholder="Search this user's actions…"
@@ -303,6 +362,10 @@ useLive().onEvents(({ user, events: incoming }) => {
 </template>
 
 <style scoped>
+.uf-list { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 2px; }
+.uf-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; font-size: 0.9rem; cursor: pointer; }
+.uf-item:hover { background: rgba(var(--v-theme-on-surface), 0.05); }
+.uf-item.on { background: rgba(var(--v-theme-primary), 0.16); font-weight: 700; }
 .data-total { display: flex; align-items: flex-end; justify-content: space-between; padding: 12px 14px; margin-bottom: 10px; border-radius: 12px; background: rgba(var(--v-theme-primary), 0.12); }
 .pkg + .pkg { margin-top: 12px; }
 </style>

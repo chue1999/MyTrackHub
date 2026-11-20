@@ -131,8 +131,10 @@ export const API_LABELS: Record<string, string> = {
   historyRental: 'Borrowing history',
 }
 
-/** "POST /tplusapp/GameRandom" → "Spin / open random box" (or the raw name). */
+/** "POST /tplusapp/GameRandom" → "Spin the wheel" (or the raw name). */
 export function apiLabel(name: string) {
+  const known = lookupApi(name)
+  if (known) return known.label
   const path = name.split(' ')[1] ?? name
   const last = path.split('/').filter((s) => s && !s.startsWith(':')).pop() ?? path
   return API_LABELS[last] ?? last

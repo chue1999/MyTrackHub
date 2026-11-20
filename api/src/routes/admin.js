@@ -428,6 +428,38 @@ router.get('/stats/packages', async (req, res, next) => {
   }
 });
 
+// ── app features ─────────────────────────────────────────────────────
+
+/**
+ * GET /stats/features?days=30&userId=
+ * Usage of every API the app called: uses, successes, failures, users and
+ * when it was last used. The website groups these into app features.
+ */
+router.get('/stats/features', async (req, res, next) => {
+  try {
+    const days = Math.min(365, Math.max(1, Number.parseInt(req.query.days, 10) || 30));
+    const since = new Date();
+    since.setHours(0, 0, 0, 0);
+    since.setDate(since.getDate() - (days - 1));
+    const userId = req.query.userId && UUID.test(req.query.userId) ? req.query.userId : null;
+    const rows = await sequelize.query(
+      `SELECT name,
+              COUNT(*)::int AS uses,
+              COUNT(*) FILTER (WHERE success IS TRUE)::int AS succeeded,
+              COUNT(*) FILTER (WHERE success IS FALSE)::int AS failed,
+              COUNT(DISTINCT user_id)::int AS users,
+              MAX(occurred_at) AS "lastAt"
+         FROM events
+        WHERE type = 'api' AND occurred_at >= :since ${userId ? 'AND user_id = :userId' : ''}
+        GROUP BY name`,
+      { replacements: { since, userId }, type: QueryTypes.SELECT },
+    );
+    res.json({ days, apis: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ── users ────────────────────────────────────────────────────────────
 
 /** GET /users?search=&page=&pageSize=&sort=lastSeenAt|loginCount|firstSeenAt */
@@ -530,6 +562,16 @@ router.get('/events', async (req, res, next) => {
       where.userId = req.query.userId;
     }
     if (EVENT_TYPES.includes(req.query.type)) where.type = req.query.type;
+    // apis=TransferBalance,TransferConfirmOtp,tplusqueue/add → only those APIs (a feature)
+    const apis = String(req.query.apis || '')
+      .split(',')
+      .map((x) => x.trim())
+      .filter((x) => /^[A-Za-z0-9_\-/]{1,80}$/.test(x))
+      .slice(0, 40);
+    if (apis.length) {
+      where.type = 'api';
+      where[Op.and] = [...(where[Op.and] || []), { [Op.or]: apis.map((a) => ({ name: { [Op.like]: `%/${a}` } })) }];
+    }
     if (req.query.success === 'true') where.success = true;
     if (req.query.success === 'false') where.success = false;
     const range = dateRange(req.query);
