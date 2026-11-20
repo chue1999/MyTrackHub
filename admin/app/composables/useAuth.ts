@@ -2,6 +2,7 @@ interface AdminInfo {
   id: number
   username: string
   displayName?: string | null
+  role?: 'admin' | 'viewer'
 }
 
 /** Admin login state, kept in cookies so it survives a page reload. */

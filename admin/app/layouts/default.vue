@@ -3,16 +3,28 @@ import { useDisplay, useTheme } from 'vuetify'
 
 const { admin, logout } = useAuth()
 const live = useLive()
-onMounted(() => live.connect())
+const api = useApi()
+onMounted(async () => {
+  live.connect()
+  // Refresh name/role (e.g. after an administrator changed this account).
+  try {
+    const me = await api<{ id: number; username: string; displayName: string | null; role: 'admin' | 'viewer' }>('/auth/me')
+    admin.value = { id: me.id, username: me.username, displayName: me.displayName, role: me.role }
+  } catch {}
+})
 const { mdAndUp } = useDisplay()
 const theme = useTheme()
 const drawer = ref<boolean | null>(null)
+const pwDialog = ref(false)
 
-const nav = [
+const nav = computed(() => [
   { title: 'Dashboard', icon: 'mdi-view-dashboard-outline', to: '/' },
   { title: 'Users', icon: 'mdi-account-group-outline', to: '/users' },
   { title: 'Activity log', icon: 'mdi-timeline-text-outline', to: '/events' },
-]
+  ...(admin.value?.role === 'admin'
+    ? [{ title: 'Admin accounts', icon: 'mdi-shield-account-outline', to: '/accounts' }]
+    : []),
+])
 
 const isDark = computed(() => theme.global.current.value.dark)
 function toggleTheme() {
@@ -71,10 +83,19 @@ function toggleTheme() {
         </v-btn>
       </template>
       <v-list density="compact">
+        <v-list-item
+          :subtitle="admin?.role === 'admin' ? 'Administrator' : 'Viewer'"
+          :title="admin?.username"
+          prepend-icon="mdi-account-circle-outline"
+        />
+        <v-divider />
+        <v-list-item prepend-icon="mdi-lock-reset" title="Change password" @click="pwDialog = true" />
         <v-list-item prepend-icon="mdi-logout" title="Log out" @click="logout" />
       </v-list>
     </v-menu>
   </v-app-bar>
+
+  <ChangePasswordDialog v-model="pwDialog" />
 
   <v-main>
     <v-container fluid class="pa-4 pa-md-6" style="max-width: 1400px">

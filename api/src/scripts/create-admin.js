@@ -21,6 +21,7 @@ const [admin, created] = await Admin.findOrCreate({
   where: { username },
   defaults: { username, passwordHash, displayName: nameParts.join(' ') || username },
 });
-if (!created) await admin.update({ passwordHash });
+// Resetting also re-enables the account as a full administrator (recovery).
+if (!created) await admin.update({ passwordHash, isActive: true, role: 'admin' });
 console.log(`${created ? 'Created' : 'Updated password for'} admin "${username}"`);
 await sequelize.close();

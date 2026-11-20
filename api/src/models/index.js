@@ -16,6 +16,8 @@ export const AppUser = sequelize.define(
     firstSeenAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
     lastSeenAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
     lastLoginAt: { type: DataTypes.DATE },
+    // Internal note written by staff on the admin website.
+    note: { type: DataTypes.TEXT },
   },
   {
     tableName: 'app_users',
@@ -70,9 +72,17 @@ export const Admin = sequelize.define(
     username: { type: DataTypes.STRING(60), allowNull: false, unique: true },
     passwordHash: { type: DataTypes.STRING(100), allowNull: false },
     displayName: { type: DataTypes.STRING(100) },
+    // admin = full access incl. managing accounts; viewer = read-only.
+    role: { type: DataTypes.ENUM('admin', 'viewer'), allowNull: false, defaultValue: 'admin' },
+    isActive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
     lastLoginAt: { type: DataTypes.DATE },
   },
-  { tableName: 'admins', underscored: true },
+  {
+    tableName: 'admins',
+    underscored: true,
+    defaultScope: { attributes: { exclude: ['passwordHash'] } },
+    scopes: { withPassword: { attributes: { include: ['passwordHash'] } } },
+  },
 );
 
 AppUser.hasMany(Event, { foreignKey: 'userId', as: 'events', onDelete: 'SET NULL' });

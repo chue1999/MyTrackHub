@@ -31,7 +31,7 @@ export function requireAdmin(req, res, next) {
 }
 
 export function signAdminToken(admin) {
-  return jwt.sign({ sub: admin.id, username: admin.username }, config.jwtSecret, {
+  return jwt.sign({ sub: admin.id, username: admin.username, role: admin.role }, config.jwtSecret, {
     expiresIn: config.jwtExpiresIn,
   });
 }

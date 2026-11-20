@@ -37,6 +37,7 @@ export interface AppUser {
   firstSeenAt: string
   lastSeenAt: string
   lastLoginAt: string | null
+  note?: string | null
 }
 
 export interface TrackedEvent {

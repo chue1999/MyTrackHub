@@ -29,6 +29,9 @@ function dateRange(query) {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Digits of a phone search without the 856 / leading 0 prefix: "020 5555 1234" → "2055551234". */
+const searchDigits = (s) => String(s).replace(/\D/g, '').replace(/^856/, '').replace(/^0+/, '');
+
 const like = (s) => `%${String(s).replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
 
 // ── auth ─────────────────────────────────────────────────────────────
@@ -40,14 +43,17 @@ router.post('/auth/login', loginLimiter, async (req, res, next) => {
     const { username, password } = z
       .object({ username: z.string().min(1), password: z.string().min(1) })
       .parse(req.body);
-    const admin = await Admin.findOne({ where: { username } });
+    const admin = await Admin.scope('withPassword').findOne({ where: { username } });
     if (!admin || !(await bcrypt.compare(password, admin.passwordHash))) {
       return res.status(401).json({ message: 'Wrong username or password' });
+    }
+    if (!admin.isActive) {
+      return res.status(403).json({ message: 'This account is disabled. Ask an administrator.' });
     }
     await admin.update({ lastLoginAt: new Date() });
     res.json({
       token: signAdminToken(admin),
-      admin: { id: admin.id, username: admin.username, displayName: admin.displayName },
+      admin: { id: admin.id, username: admin.username, displayName: admin.displayName, role: admin.role },
     });
   } catch (err) {
     next(err);
@@ -59,17 +65,110 @@ router.get('/stream', streamHandler);
 
 router.use(requireAdmin);
 
+// Disabled or deleted accounts lose access immediately, not when the token expires.
+router.use(async (req, res, next) => {
+  try {
+    const me = await Admin.findByPk(req.admin.sub);
+    if (!me || !me.isActive) return res.status(401).json({ message: 'Account disabled' });
+    req.me = me;
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
+
+const requireRoleAdmin = (req, res, next) =>
+  req.me?.role === 'admin' ? next() : res.status(403).json({ message: 'Only administrators can do this' });
+
 /** POST /stream/ticket — one-time ticket for opening the live stream. */
 router.post('/stream/ticket', (req, res) => {
   res.json({ ticket: createTicket(req.admin.sub), viewers: liveClientCount() });
 });
 
-router.get('/auth/me', async (req, res) => {
-  const admin = await Admin.findByPk(req.admin.sub, {
-    attributes: ['id', 'username', 'displayName', 'lastLoginAt'],
-  });
-  if (!admin) return res.status(401).json({ message: 'Account no longer exists' });
-  res.json(admin);
+router.get('/auth/me', (req, res) => res.json(req.me));
+
+// ── admin accounts ───────────────────────────────────────────────────
+
+const accountSchema = z.object({
+  username: z.string().trim().min(3).max(60).regex(/^[a-zA-Z0-9._-]+$/, 'Letters, numbers, . _ - only'),
+  password: z.string().min(8, 'Password must be at least 8 characters').max(100),
+  displayName: z.string().trim().max(100).optional().nullable(),
+  role: z.enum(['admin', 'viewer']).default('viewer'),
+  isActive: z.boolean().default(true),
+});
+
+router.get('/accounts', requireRoleAdmin, async (_req, res) => {
+  res.json(await Admin.findAll({ order: [['createdAt', 'ASC']] }));
+});
+
+router.post('/accounts', requireRoleAdmin, async (req, res, next) => {
+  try {
+    const data = accountSchema.parse(req.body);
+    if (await Admin.findOne({ where: { username: data.username } })) {
+      return res.status(409).json({ message: 'This username is already taken' });
+    }
+    const { password, ...rest } = data;
+    const created = await Admin.create({ ...rest, passwordHash: await bcrypt.hash(password, 10) });
+    res.status(201).json(await Admin.findByPk(created.id));
+  } catch (err) {
+    next(err);
+  }
+});
+
+const activeAdmins = (exceptId) =>
+  Admin.count({ where: { role: 'admin', isActive: true, id: { [Op.ne]: exceptId } } });
+
+router.patch('/accounts/:id', requireRoleAdmin, async (req, res, next) => {
+  try {
+    const data = accountSchema.partial().parse(req.body);
+    const account = await Admin.findByPk(req.params.id);
+    if (!account) return res.status(404).json({ message: 'Account not found' });
+    if (data.username && data.username !== account.username && (await Admin.findOne({ where: { username: data.username } }))) {
+      return res.status(409).json({ message: 'This username is already taken' });
+    }
+    const losingAdmin = (data.role === 'viewer' || data.isActive === false) && account.role === 'admin' && account.isActive;
+    if (losingAdmin && (await activeAdmins(account.id)) === 0) {
+      return res.status(400).json({ message: 'There must always be at least one active administrator' });
+    }
+    const { password, ...rest } = data;
+    if (password) rest.passwordHash = await bcrypt.hash(password, 10);
+    await account.update(rest);
+    res.json(await Admin.findByPk(account.id));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/accounts/:id', requireRoleAdmin, async (req, res, next) => {
+  try {
+    const account = await Admin.findByPk(req.params.id);
+    if (!account) return res.status(404).json({ message: 'Account not found' });
+    if (account.id === req.me.id) return res.status(400).json({ message: 'You cannot delete your own account' });
+    if (account.role === 'admin' && account.isActive && (await activeAdmins(account.id)) === 0) {
+      return res.status(400).json({ message: 'There must always be at least one active administrator' });
+    }
+    await account.destroy();
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Anyone can change their own password. */
+router.post('/auth/password', async (req, res, next) => {
+  try {
+    const { currentPassword, newPassword } = z
+      .object({ currentPassword: z.string().min(1), newPassword: z.string().min(8, 'Password must be at least 8 characters') })
+      .parse(req.body);
+    const me = await Admin.scope('withPassword').findByPk(req.me.id);
+    if (!(await bcrypt.compare(currentPassword, me.passwordHash))) {
+      return res.status(400).json({ message: 'Current password is wrong' });
+    }
+    await me.update({ passwordHash: await bcrypt.hash(newPassword, 10) });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // ── dashboard ────────────────────────────────────────────────────────
@@ -152,7 +251,7 @@ router.get('/users', async (req, res, next) => {
     const where = {};
     const search = String(req.query.search || '').trim();
     if (search) {
-      const digits = search.replace(/\D/g, '');
+      const digits = searchDigits(search);
       where[Op.or] = [
         { firstName: { [Op.iLike]: like(search) } },
         { lastName: { [Op.iLike]: like(search) } },
@@ -210,6 +309,26 @@ router.get('/users/:id', async (req, res, next) => {
   }
 });
 
+/** PATCH /users/:id — staff can correct the name or keep a note. */
+router.patch('/users/:id', async (req, res, next) => {
+  try {
+    if (req.me.role !== 'admin') return res.status(403).json({ message: 'Only administrators can edit users' });
+    const data = z
+      .object({
+        firstName: z.string().trim().max(100).optional().nullable(),
+        lastName: z.string().trim().max(100).optional().nullable(),
+        note: z.string().max(5000).optional().nullable(),
+      })
+      .parse(req.body);
+    const user = UUID.test(req.params.id) ? await AppUser.findByPk(req.params.id) : null;
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    await user.update(data);
+    res.json(user);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ── events ───────────────────────────────────────────────────────────
 
 /**
@@ -231,12 +350,16 @@ router.get('/events', async (req, res, next) => {
     if (range) where.occurredAt = range;
     const search = String(req.query.search || '').trim();
     if (search) {
-      const digits = search.replace(/\D/g, '');
+      const digits = searchDigits(search);
       where[Op.or] = [
         { name: { [Op.iLike]: like(search) } },
         { screen: { [Op.iLike]: like(search) } },
         { result: { [Op.iLike]: like(search) } },
         ...(digits.length >= 3 ? [{ msisdn: { [Op.like]: like(digits) } }] : []),
+        // Also look inside request/response details (e.g. a transfer receiver).
+        ...(digits.length >= 6
+          ? [sequelize.where(sequelize.cast(sequelize.col('properties'), 'text'), { [Op.like]: like(digits) })]
+          : []),
       ];
     }
 
@@ -245,9 +368,7 @@ router.get('/events', async (req, res, next) => {
       order: [['occurredAt', 'DESC'], ['id', 'DESC']],
       limit: pageSize,
       offset,
-      include: req.query.userId
-        ? []
-        : [{ model: AppUser, as: 'user', attributes: ['id', 'msisdn', 'firstName', 'lastName'] }],
+      include: [{ model: AppUser, as: 'user', attributes: ['id', 'msisdn', 'firstName', 'lastName'] }],
     });
     res.json({ items: rows, total: count, page, pageSize });
   } catch (err) {

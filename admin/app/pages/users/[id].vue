@@ -30,6 +30,40 @@ const { data: events, pending } = await useAsyncData(
 watch(type, () => (page.value = 1))
 const pages = computed(() => Math.max(1, Math.ceil((events.value?.total ?? 0) / pageSize)))
 
+// ── edit user ──
+const { admin: me } = useAuth()
+const editOpen = ref(false)
+const editForm = reactive({ firstName: '', lastName: '', note: '' })
+const editSaving = ref(false)
+const editError = ref('')
+function openEdit() {
+  if (!detail.value) return
+  const u = detail.value.user
+  Object.assign(editForm, { firstName: u.firstName ?? '', lastName: u.lastName ?? '', note: u.note ?? '' })
+  editError.value = ''
+  editOpen.value = true
+}
+async function saveEdit() {
+  editSaving.value = true
+  editError.value = ''
+  try {
+    const user = await api<AppUser>(`/users/${id.value}`, {
+      method: 'PATCH',
+      body: {
+        firstName: editForm.firstName.trim() || null,
+        lastName: editForm.lastName.trim() || null,
+        note: editForm.note.trim() || null,
+      },
+    })
+    if (detail.value) detail.value = { ...detail.value, user }
+    editOpen.value = false
+  } catch (e: any) {
+    editError.value = e?.data?.message || 'Could not save'
+  } finally {
+    editSaving.value = false
+  }
+}
+
 const refreshDetailSoon = debounce(() => refreshDetail(), 1500)
 useLive().onEvents(({ user, events: incoming }) => {
   if (user?.id !== id.value) return
@@ -64,6 +98,27 @@ useLive().onEvents(({ user, events: incoming }) => {
               </v-avatar>
               <div class="text-h6 font-weight-bold">{{ fullName(detail.user) }}</div>
               <div class="text-body-1 text-mono text-medium-emphasis">{{ formatPhone(detail.user.msisdn) }}</div>
+              <v-btn
+                v-if="me?.role === 'admin'"
+                size="small"
+                variant="tonal"
+                class="mt-3 text-none"
+                prepend-icon="mdi-pencil-outline"
+                @click="openEdit"
+              >
+                Edit
+              </v-btn>
+              <v-alert
+                v-if="detail.user.note"
+                variant="tonal"
+                color="warning"
+                density="compact"
+                class="mt-3 text-left"
+                icon="mdi-note-text-outline"
+                style="white-space: pre-wrap"
+              >
+                {{ detail.user.note }}
+              </v-alert>
             </v-card-text>
             <v-divider />
             <v-list density="compact" class="py-2">
@@ -153,6 +208,29 @@ useLive().onEvents(({ user, events: incoming }) => {
           </v-card>
         </v-col>
       </v-row>
+
+      <v-dialog v-model="editOpen" max-width="480">
+        <v-card rounded="xl">
+          <v-card-item prepend-icon="mdi-account-edit-outline">
+            <v-card-title class="font-weight-bold">Edit user</v-card-title>
+            <v-card-subtitle class="text-mono">{{ formatPhone(detail.user.msisdn) }}</v-card-subtitle>
+          </v-card-item>
+          <v-card-text>
+            <v-text-field v-model="editForm.firstName" label="First name" />
+            <v-text-field v-model="editForm.lastName" label="Last name" />
+            <v-textarea v-model="editForm.note" label="Internal note (only staff see this)" rows="3" auto-grow />
+            <v-alert type="info" variant="tonal" density="compact" class="mb-2">
+              The app sends the customer's real name when they open it, which may replace an edited name.
+            </v-alert>
+            <v-alert v-if="editError" type="error" variant="tonal" density="compact" :text="editError" />
+          </v-card-text>
+          <v-card-actions class="pa-4 pt-0">
+            <v-spacer />
+            <v-btn variant="text" class="text-none" @click="editOpen = false">Cancel</v-btn>
+            <v-btn color="secondary" variant="flat" class="text-none" :loading="editSaving" @click="saveEdit">Save</v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
     </template>
   </div>
 </template>

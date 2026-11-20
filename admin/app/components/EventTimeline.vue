@@ -14,11 +14,11 @@ const groups = computed(() => {
   return [...map.entries()].map(([, items]) => ({ day: items[0]!.occurredAt, items }))
 })
 
-const open = ref<Set<string>>(new Set())
-function toggle(id: string) {
-  const s = new Set(open.value)
-  s.has(id) ? s.delete(id) : s.add(id)
-  open.value = s
+const selected = ref<TrackedEvent | null>(null)
+const dialog = ref(false)
+function show(e: TrackedEvent) {
+  selected.value = e
+  dialog.value = true
 }
 
 const p = (e: TrackedEvent) => e.properties as Record<string, any>
@@ -29,7 +29,6 @@ const dotColor = (e: TrackedEvent) =>
 const simpleProps = (e: TrackedEvent) =>
   Object.entries(e.properties ?? {}).filter(([, v]) => v === null || typeof v !== 'object')
 
-const pretty = (v: unknown) => JSON.stringify(v, null, 2)
 </script>
 
 <template>
@@ -47,6 +46,7 @@ const pretty = (v: unknown) => JSON.stringify(v, null, 2)
           size="small"
           fill-dot
         >
+          <div class="event-row" role="button" tabindex="0" @click="show(e)" @keydown.enter="show(e)">
           <!-- headline -->
           <div class="d-flex flex-wrap align-center ga-2">
             <span class="text-caption text-medium-emphasis text-mono">{{ formatTime(e.occurredAt) }}</span>
@@ -71,6 +71,11 @@ const pretty = (v: unknown) => JSON.stringify(v, null, 2)
             </v-chip>
           </div>
 
+          <!-- business summary: who → whom, how much -->
+          <div v-if="e.type === 'api' && apiSummaryLine(e)" class="summary mt-1">
+            <v-icon icon="mdi-swap-horizontal" size="16" class="mr-1" />{{ apiSummaryLine(e) }}
+          </div>
+
           <!-- API result line -->
           <div v-if="e.type === 'api'" class="mt-1">
             <div v-if="e.result" class="text-body-2" :class="e.success === false ? 'text-error' : ''">
@@ -81,35 +86,13 @@ const pretty = (v: unknown) => JSON.stringify(v, null, 2)
               <span v-if="p(e).status">· HTTP {{ p(e).status }}</span>
               <span v-if="p(e).resultCode != null">· code {{ p(e).resultCode }}</span>
               <span v-if="p(e).ms != null">· {{ p(e).ms }} ms</span>
-              <v-btn
-                v-if="p(e).request || p(e).response"
-                size="x-small"
-                variant="text"
-                density="comfortable"
-                class="text-none"
-                :append-icon="open.has(e.id) ? 'mdi-chevron-up' : 'mdi-chevron-down'"
-                @click="toggle(e.id)"
-              >
-                Details
-              </v-btn>
+              <span class="text-primary font-weight-medium">· View details</span>
             </div>
-            <v-expand-transition>
-              <div v-if="open.has(e.id)" class="mt-2 d-flex flex-column ga-2">
-                <div v-if="p(e).request">
-                  <div class="text-caption font-weight-bold mb-1">Sent (what the user asked for)</div>
-                  <pre class="json">{{ pretty(p(e).request) }}</pre>
-                </div>
-                <div v-if="p(e).response">
-                  <div class="text-caption font-weight-bold mb-1">Received (what they got)</div>
-                  <pre class="json">{{ pretty(p(e).response) }}</pre>
-                </div>
-              </div>
-            </v-expand-transition>
           </div>
 
           <!-- who -->
           <div v-if="showUser && e.user" class="text-body-2 mt-1">
-            <NuxtLink :to="`/users/${e.user.id}`" class="text-decoration-none">
+            <NuxtLink :to="`/users/${e.user.id}`" class="text-decoration-none" @click.stop>
               <v-icon icon="mdi-account" size="14" />
               {{ fullName(e.user) }} · {{ formatPhone(e.user.msisdn) }}
             </NuxtLink>
@@ -128,6 +111,7 @@ const pretty = (v: unknown) => JSON.stringify(v, null, 2)
               {{ k }}: {{ v }}
             </v-chip>
           </div>
+          </div>
         </v-timeline-item>
       </v-timeline>
     </div>
@@ -135,20 +119,30 @@ const pretty = (v: unknown) => JSON.stringify(v, null, 2)
       <v-icon icon="mdi-timeline-clock-outline" size="48" class="mb-2" />
       <div>No activity found</div>
     </div>
+    <EventDetailDialog v-model="dialog" :event="selected" />
   </div>
 </template>
 
 <style scoped>
-.json {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
-  line-height: 1.45;
-  max-height: 320px;
-  overflow: auto;
-  padding: 10px 12px;
-  border-radius: 10px;
+.event-row {
+  cursor: pointer;
+  border-radius: 12px;
+  padding: 6px 10px;
+  margin: -6px -10px;
+  transition: background 0.15s;
+}
+.event-row:hover,
+.event-row:focus-visible {
+  background: rgba(var(--v-theme-primary), 0.08);
+  outline: none;
+}
+.summary {
+  display: inline-flex;
+  align-items: center;
+  font-weight: 700;
+  font-size: 0.95rem;
+  padding: 4px 10px;
+  border-radius: 8px;
   background: rgba(var(--v-theme-on-surface), 0.05);
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 </style>

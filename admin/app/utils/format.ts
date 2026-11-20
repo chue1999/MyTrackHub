@@ -134,3 +134,86 @@ export function apiLabel(name: string) {
   const last = path.split('/').filter((s) => s && !s.startsWith(':')).pop() ?? path
   return API_LABELS[last] ?? last
 }
+
+export function formatMoney(v: unknown) {
+  const n = typeof v === 'number' ? v : Number(String(v ?? '').replace(/[^\d.]/g, ''))
+  return Number.isFinite(n) && String(v ?? '') !== '' ? `${n.toLocaleString('en-US')} ₭` : String(v ?? '—')
+}
+
+export interface SummaryRow {
+  label: string
+  value: string
+  icon: string
+  strong?: boolean
+}
+
+type Ev = {
+  name: string
+  properties: Record<string, any>
+  msisdn?: string | null
+  user?: { msisdn?: string | null } | null
+}
+
+/** Pulls the important business facts out of an API call (who, to whom, how much…). */
+export function apiSummary(e: Ev): SummaryRow[] {
+  const endpoint = (e.name.split(' ')[1] ?? '').split('/').pop() ?? ''
+  const body = (e.properties?.request?.body ?? {}) as Record<string, any>
+  const me = formatPhone(e.user?.msisdn ?? e.msisdn ?? null)
+  const phone = (v: unknown) => formatPhone(String(v ?? '').replace(/^\+?856/, '').replace(/^0/, ''))
+  const rows: SummaryRow[] = []
+  const add = (label: string, value: unknown, icon: string, strong = false) => {
+    if (value !== undefined && value !== null && value !== '') rows.push({ label, value: String(value), icon, strong })
+  }
+
+  switch (endpoint) {
+    case 'TransferBalance':
+      add('From', me, 'mdi-cellphone-arrow-down')
+      add('To', body.Receiver && phone(body.Receiver), 'mdi-cellphone-arrow-down-variant', true)
+      add('Amount', body.TransferAmount != null ? formatMoney(body.TransferAmount) : null, 'mdi-cash', true)
+      break
+    case 'TransferConfirmOtp':
+      add('From', me, 'mdi-cellphone')
+      add('Wants to send to', body.Receiver && phone(body.Receiver), 'mdi-cellphone-arrow-down-variant', true)
+      break
+    case 'RegisterPackage':
+    case 'InquiryPackage':
+      add('For number', body.Msisdn ? phone(body.Msisdn) : me, 'mdi-cellphone')
+      add('Package', body.PackageCode, 'mdi-package-variant', true)
+      break
+    case 'CardRifillForPrepaid':
+      add('Topped up number', body.Msisdn ? phone(body.Msisdn) : me, 'mdi-cellphone', true)
+      break
+    case 'PostpayPayment':
+      add('Paid for number', body.Msisdn ? phone(body.Msisdn) : me, 'mdi-cellphone', true)
+      add('Bill', body.PaymentSubject, 'mdi-file-document-outline')
+      break
+    case 'BookingSimCard':
+      add('Number ordered', body.Tel && phone(body.Tel), 'mdi-sim', true)
+      add('Amount', body.Amount != null ? formatMoney(body.Amount) : null, 'mdi-cash', true)
+      break
+    case 'CreateRedeemPremium':
+    case 'createRedeemPremium':
+      add('Gift id', body.pdId, 'mdi-gift-outline', true)
+      add('Receiver name', body.customerName, 'mdi-account')
+      add('Receiver phone', body.tel && phone(body.tel), 'mdi-cellphone')
+      add('Address', body.adress, 'mdi-map-marker-outline')
+      break
+    case 'rentalServices':
+      add('Rental id', body.rentalId, 'mdi-identifier', true)
+      break
+  }
+  if (body.GiftCode) {
+    add('Gift code', body.GiftCode, 'mdi-gift-outline', true)
+    add('Data', body.Net, 'mdi-wifi')
+    add('Duration', body.Duration, 'mdi-timer-outline')
+  }
+  return rows
+}
+
+/** One-line version of apiSummary for the timeline. */
+export function apiSummaryLine(e: Ev) {
+  const r = apiSummary(e)
+  const get = (l: string) => r.find((x) => x.label === l)?.value
+  if (get('To')) return [get('From'), '→', get('To'), get('Amount') && `· ${get('Amount')}`].filter(Boolean).join(' ')
+  return r.filter((x) => x.strong).map((x) => `${x.label}: ${x.value}`).join(' · ')
+}

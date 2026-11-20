@@ -39,7 +39,7 @@ app.use((_req, res) => res.status(404).json({ message: 'Not found' }));
 // eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {
   if (err instanceof ZodError) {
-    return res.status(400).json({ message: 'Invalid request', issues: err.issues });
+    return res.status(400).json({ message: err.issues[0]?.message || 'Invalid request', issues: err.issues });
   }
   if (err.type === 'entity.parse.failed') {
     return res.status(400).json({ message: 'Body is not valid JSON' });
