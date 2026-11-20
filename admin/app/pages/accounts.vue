@@ -108,7 +108,7 @@ function toast(text: string, color = 'success') {
   <div>
     <div class="d-flex flex-wrap align-center ga-3 mb-6">
       <div>
-        <h1 class="text-h5 font-weight-bold">Admin accounts</h1>
+        <h1 class="page-title">Admin accounts</h1>
         <div class="text-body-2 text-medium-emphasis">Who can log in to this website</div>
       </div>
       <v-spacer />

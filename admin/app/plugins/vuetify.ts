@@ -10,7 +10,7 @@ export default defineNuxtPlugin((app) => {
           colors: {
             primary: '#F5B800',
             secondary: '#1F1F1F',
-            background: '#F5F5F5',
+            background: '#F4F5F7',
             surface: '#FFFFFF',
             success: '#2E9E5B',
             warning: '#E09A00',
@@ -23,14 +23,16 @@ export default defineNuxtPlugin((app) => {
           colors: {
             primary: '#FCD021',
             secondary: '#EEEEEE',
-            background: '#121212',
-            surface: '#1E1E1E',
+            background: '#0E0E10',
+            surface: '#18181B',
           },
         },
       },
     },
     defaults: {
       VCard: { rounded: 'xl', elevation: 0 },
+      VDataTable: { hover: true },
+      VDataTableServer: { hover: true },
       VBtn: { rounded: 'lg' },
       VTextField: { variant: 'outlined', density: 'comfortable', rounded: 'lg' },
       VSelect: { variant: 'outlined', density: 'comfortable', rounded: 'lg' },

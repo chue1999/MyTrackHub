@@ -69,7 +69,7 @@ function showMissed() {
   <div>
     <div class="d-flex flex-wrap align-center ga-3 mb-6">
       <div>
-        <h1 class="text-h5 font-weight-bold">Activity log</h1>
+        <h1 class="page-title">Activity log</h1>
         <div class="text-body-2 text-medium-emphasis">Every login, screen and tap from all users</div>
       </div>
       <v-spacer />

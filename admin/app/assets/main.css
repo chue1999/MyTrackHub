@@ -2,12 +2,63 @@ html {
   overflow-y: auto;
 }
 
-.v-card.bordered {
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+/* ── Typography ── */
+:root {
+  --app-font: 'Inter', 'Noto Sans Lao', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+.v-application,
+.v-application [class*='text-'],
+.v-application .v-btn,
+.v-application input,
+.v-application textarea {
+  font-family: var(--app-font) !important;
+  letter-spacing: -0.005em;
+}
+.v-application .v-btn {
+  letter-spacing: 0;
 }
 
+/* ── Cards: soft border + soft shadow ── */
+.v-card.bordered {
+  border: 1px solid rgba(17, 24, 39, 0.07);
+  box-shadow:
+    0 1px 2px rgba(17, 24, 39, 0.04),
+    0 6px 20px rgba(17, 24, 39, 0.04);
+}
+.v-theme--dark .v-card.bordered {
+  border-color: rgba(255, 255, 255, 0.07);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+.v-card .v-card-title {
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+}
+
+/* ── Tables ── */
+.v-table > .v-table__wrapper > table > thead > tr > th {
+  background: rgba(var(--v-theme-on-surface), 0.025);
+  font-weight: 700 !important;
+  text-transform: uppercase;
+  font-size: 0.7rem !important;
+  letter-spacing: 0.05em !important;
+  color: rgba(var(--v-theme-on-surface), 0.55) !important;
+}
+.v-table > .v-table__wrapper > table > tbody > tr:not(:last-child) > td {
+  border-bottom-color: rgba(var(--v-theme-on-surface), 0.06) !important;
+}
+
+/* ── Page header ── */
+.page-title {
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.v-application .text-mono,
 .text-mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
+  letter-spacing: 0;
 }
 
 /* ── Chart colours (validated reference palette; light and dark stepped separately) ── */
@@ -28,7 +79,7 @@ html {
   --status-unknown: #b5b4ae;
 }
 .v-theme--dark {
-  --chart-surface: #1e1e1e;
+  --chart-surface: #18181b;
   --chart-grid: #34342f;
   --chart-text: #f0efec;
   --chart-text-2: #c3c2b7;

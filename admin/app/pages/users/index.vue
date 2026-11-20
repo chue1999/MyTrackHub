@@ -17,6 +17,15 @@ watch(search, (v) => {
   }, 350)
 })
 
+// The top-bar quick search changes ?search= while this page is open.
+watch(
+  () => route.query.search,
+  (q) => {
+    const v = String(q || '')
+    if (v !== search.value.trim()) search.value = v
+  },
+)
+
 const page = ref(1)
 const pageSize = ref(20)
 const sort = ref<'lastSeenAt' | 'loginCount' | 'firstSeenAt'>('lastSeenAt')
@@ -52,7 +61,7 @@ function onOptions(o: { page: number; itemsPerPage: number }) {
   <div>
     <div class="d-flex flex-wrap align-center ga-3 mb-6">
       <div>
-        <h1 class="text-h5 font-weight-bold">Users</h1>
+        <h1 class="page-title">Users</h1>
         <div class="text-body-2 text-medium-emphasis">Everyone who has logged in to the app</div>
       </div>
     </div>

@@ -42,6 +42,19 @@ const { data, pending, error, refresh } = await useAsyncData(
   { watch: [days] },
 )
 
+// ── today vs yesterday (from the daily series) ──
+const { admin } = useAuth()
+const deltaOf = (k: 'activeUsers' | 'logins' | 'events') => {
+  const d = data.value?.daily ?? []
+  if (d.length < 2) return null
+  return d[d.length - 1]![k] - d[d.length - 2]![k]
+}
+const greeting = computed(() => {
+  const h = new Date().getHours()
+  return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'
+})
+const todayLabel = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+
 // ── daily trend ──
 const metric = ref<'activeUsers' | 'logins' | 'events'>('activeUsers')
 const METRIC_LABEL = { activeUsers: 'active users', logins: 'logins', events: 'actions' }
@@ -160,38 +173,53 @@ live.onEvents(({ events }) => {
 
 <template>
   <div>
-    <div class="d-flex flex-wrap align-center ga-3 mb-6">
-      <div>
-        <h1 class="text-h5 font-weight-bold">Dashboard</h1>
-        <div class="text-body-2 text-medium-emphasis">Who is using the app and what they do most</div>
+    <!-- welcome banner -->
+    <section class="hero mb-6">
+      <div class="hero-glow" />
+      <div class="hero-content">
+        <div>
+          <div class="hero-date">{{ todayLabel }}</div>
+          <h1 class="hero-title">{{ greeting }}, {{ admin?.displayName || admin?.username }}</h1>
+          <p class="hero-sub">Here's what's happening in the MyTPlus app.</p>
+          <div v-if="data" class="hero-chips">
+            <span><v-icon icon="mdi-account-clock" size="16" /> {{ data.totals.activeToday }} active today</span>
+            <span><v-icon icon="mdi-login" size="16" /> {{ data.totals.loginsToday }} logins</span>
+            <span><v-icon icon="mdi-bank-transfer" size="16" /> {{ formatMoney(data.transfersToday.amount) }} transferred</span>
+            <NuxtLink v-if="data.totals.failedToday" to="/events" class="bad" title="See in the activity log">
+              <v-icon icon="mdi-alert-circle" size="16" /> {{ data.totals.failedToday }} failed today
+              <v-icon icon="mdi-arrow-right" size="14" />
+            </NuxtLink>
+          </div>
+        </div>
+        <div class="hero-actions">
+          <v-btn-toggle v-model="days" mandatory density="comfortable" divided rounded="lg" class="range">
+            <v-btn :value="7" class="text-none">7 days</v-btn>
+            <v-btn :value="14" class="text-none">14 days</v-btn>
+            <v-btn :value="30" class="text-none">30 days</v-btn>
+          </v-btn-toggle>
+          <v-btn icon="mdi-refresh" variant="flat" color="white" rounded="lg" :loading="pending" title="Refresh" @click="refresh()" />
+        </div>
       </div>
-      <v-spacer />
-      <v-btn-toggle v-model="days" mandatory density="comfortable" variant="outlined" divided rounded="lg">
-        <v-btn :value="7" class="text-none">7 days</v-btn>
-        <v-btn :value="14" class="text-none">14 days</v-btn>
-        <v-btn :value="30" class="text-none">30 days</v-btn>
-      </v-btn-toggle>
-      <v-btn icon="mdi-refresh" variant="text" :loading="pending" @click="refresh()" />
-    </div>
+    </section>
 
     <v-alert v-if="error" type="error" variant="tonal" class="mb-4" :text="error.data?.message || 'Could not load the dashboard'" />
 
     <template v-if="data">
       <!-- headline numbers -->
       <v-row>
-        <v-col cols="12" sm="6" md="4" xl>
+        <v-col cols="12" sm="6" md="4" lg>
           <StatCard title="All users" :value="data.totals.totalUsers" icon="mdi-account-group" :hint="`+${data.totals.newUsersToday} new today`" />
         </v-col>
-        <v-col cols="12" sm="6" md="4" xl>
-          <StatCard title="Active today" :value="data.totals.activeToday" icon="mdi-account-clock" color="success" />
+        <v-col cols="12" sm="6" md="4" lg>
+          <StatCard title="Active today" :value="data.totals.activeToday" icon="mdi-account-clock" color="success" :delta="deltaOf('activeUsers')" />
         </v-col>
-        <v-col cols="12" sm="6" md="4" xl>
-          <StatCard title="Logins today" :value="data.totals.loginsToday" icon="mdi-login" color="info" />
+        <v-col cols="12" sm="6" md="4" lg>
+          <StatCard title="Logins today" :value="data.totals.loginsToday" icon="mdi-login" color="info" :delta="deltaOf('logins')" />
         </v-col>
-        <v-col cols="12" sm="6" md="6" xl>
-          <StatCard title="Actions today" :value="data.totals.eventsToday" icon="mdi-gesture-tap" color="warning" />
+        <v-col cols="12" sm="6" md="6" lg>
+          <StatCard title="Actions today" :value="data.totals.eventsToday" icon="mdi-gesture-tap" color="warning" :delta="deltaOf('events')" />
         </v-col>
-        <v-col cols="12" md="6" xl>
+        <v-col cols="12" md="6" lg>
           <StatCard
             title="Transferred today"
             :value="formatMoney(data.transfersToday.amount)"
@@ -217,19 +245,6 @@ live.onEvents(({ events }) => {
         </div>
       </v-alert>
 
-      <v-alert
-        v-if="data.totals.failedToday"
-        type="error"
-        variant="tonal"
-        icon="mdi-alert-circle-outline"
-        rounded="lg"
-        class="mt-4"
-      >
-        <strong>{{ data.totals.failedToday }}</strong> failed action{{ data.totals.failedToday > 1 ? 's' : '' }} today.
-        <template #append>
-          <v-btn to="/events" variant="text" size="small" class="text-none">See activity log</v-btn>
-        </template>
-      </v-alert>
 
       <!-- daily trend -->
       <v-card class="bordered mt-4">
@@ -436,6 +451,92 @@ live.onEvents(({ events }) => {
 </template>
 
 <style scoped>
+.hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 22px;
+  padding: 28px 30px;
+  color: #1a1a1a;
+  background: linear-gradient(120deg, #fcd021 0%, #ffbf1f 55%, #ffa600 100%);
+  box-shadow: 0 12px 32px rgba(255, 179, 0, 0.22);
+}
+.hero-glow {
+  position: absolute;
+  right: -120px;
+  top: -160px;
+  width: 460px;
+  height: 460px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.55), transparent 65%);
+  pointer-events: none;
+}
+.hero-content {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+}
+.hero-date {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.7;
+}
+.hero-title {
+  font-size: 1.9rem;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  margin: 4px 0 4px;
+}
+.hero-sub {
+  opacity: 0.8;
+  margin: 0 0 14px;
+}
+.hero-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.hero-chips > span,
+.hero-chips > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(4px);
+}
+.hero-chips > .bad {
+  background: #1a1a1a;
+  color: #ffd54a;
+  text-decoration: none;
+}
+.hero-chips > .bad:hover {
+  background: #000;
+}
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.range {
+  background: transparent !important;
+}
+.range :deep(.v-btn) {
+  background: rgba(255, 255, 255, 0.75) !important;
+  color: #1a1a1a !important;
+}
+.range :deep(.v-btn--active) {
+  background: #1a1a1a !important;
+  color: #fff !important;
+}
 .feed-enter-active {
   transition: all 0.4s ease;
 }
