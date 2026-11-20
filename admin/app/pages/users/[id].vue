@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AppUser, Paged, TrackedEvent } from '~/composables/useApi'
+import type { AppUser, Paged, TrackedEvent } from '~/types/api'
 
 interface UserDetail {
   user: AppUser
@@ -12,9 +12,11 @@ const api = useApi()
 const route = useRoute()
 const id = computed(() => String(route.params.id))
 
-const { data: detail, error, refresh: refreshDetail } = await useAsyncData(`user-${id.value}`, () =>
-  api<UserDetail>(`/users/${id.value}`),
-)
+const {
+  data: detail,
+  error,
+  refresh: refreshDetail,
+} = await useAsyncData(`user-${id.value}`, () => api<UserDetail>(`/users/${id.value}`))
 
 const type = ref<string | null>(null)
 const userFeature = ref<string | null>(null)
@@ -50,28 +52,40 @@ const { data: events, pending } = await useAsyncData(
 )
 watch(type, () => (page.value = 1))
 
-
 // ── features this user used ──
 const { data: featureUsage } = await useAsyncData(
   `user-features-${id.value}`,
   () =>
-    api<{ apis: { name: string; uses: number; succeeded: number; failed: number; lastAt: string }[] }>('/stats/features', {
-      query: {
-        userId: id.value,
-        // follows the activity date range; without one, the last year
-        ...(userRange.value.from || userRange.value.to
-          ? { from: rangeIso(userRange.value.from), to: rangeIso(userRange.value.to, true) }
-          : { days: 365 }),
+    api<{ apis: { name: string; uses: number; succeeded: number; failed: number; lastAt: string }[] }>(
+      '/stats/features',
+      {
+        query: {
+          userId: id.value,
+          // follows the activity date range; without one, the last year
+          ...(userRange.value.from || userRange.value.to
+            ? { from: rangeIso(userRange.value.from), to: rangeIso(userRange.value.to, true) }
+            : { days: 365 }),
+        },
       },
-    }),
+    ),
   { watch: [userRange] },
 )
 const userFeatures = computed(() => {
-  const map = new Map<string, { key: string; label: string; icon: string; uses: number; failed: number; lastAt: string }>()
+  const map = new Map<
+    string,
+    { key: string; label: string; icon: string; uses: number; failed: number; lastAt: string }
+  >()
   for (const a of featureUsage.value?.apis ?? []) {
     const f = lookupApi(a.name)?.feature
     const key = f?.key ?? 'other'
-    const row = map.get(key) ?? { key, label: f?.label ?? 'Other', icon: f?.icon ?? 'mdi-dots-horizontal', uses: 0, failed: 0, lastAt: a.lastAt }
+    const row = map.get(key) ?? {
+      key,
+      label: f?.label ?? 'Other',
+      icon: f?.icon ?? 'mdi-dots-horizontal',
+      uses: 0,
+      failed: 0,
+      lastAt: a.lastAt,
+    }
     row.uses += a.uses
     row.failed += a.failed
     if (a.lastAt > row.lastAt) row.lastAt = a.lastAt
@@ -111,8 +125,8 @@ async function saveEdit() {
     })
     if (detail.value) detail.value = { ...detail.value, user }
     editOpen.value = false
-  } catch (e: any) {
-    editError.value = e?.data?.message || 'Could not save'
+  } catch (e) {
+    editError.value = errorMessage(e, 'Could not save')
   } finally {
     editSaving.value = false
   }
@@ -140,7 +154,7 @@ useLive().onEvents(({ user, events: incoming }) => {
   <div>
     <v-btn to="/users" variant="text" prepend-icon="mdi-arrow-left" class="mb-4 text-none">All users</v-btn>
 
-    <v-alert v-if="error" type="error" variant="tonal" :text="error.data?.message || 'Could not load this user'" />
+    <v-alert v-if="error" type="error" variant="tonal" :text="errorMessage(error, 'Could not load this user')" />
 
     <template v-if="detail">
       <v-row>
@@ -177,26 +191,46 @@ useLive().onEvents(({ user, events: incoming }) => {
             <v-divider />
             <v-list density="compact" class="py-2">
               <v-list-item prepend-icon="mdi-login" title="Logins" :subtitle="String(detail.user.loginCount)" />
-              <v-list-item prepend-icon="mdi-clock-outline" title="Last active" :subtitle="`${timeAgo(detail.user.lastSeenAt)} · ${formatDateTime(detail.user.lastSeenAt)}`" />
-              <v-list-item prepend-icon="mdi-account-clock-outline" title="Last login" :subtitle="formatDateTime(detail.user.lastLoginAt)" />
-              <v-list-item prepend-icon="mdi-calendar-plus" title="First seen" :subtitle="formatDateTime(detail.user.firstSeenAt)" />
+              <v-list-item
+                prepend-icon="mdi-clock-outline"
+                title="Last active"
+                :subtitle="`${timeAgo(detail.user.lastSeenAt)} · ${formatDateTime(detail.user.lastSeenAt)}`"
+              />
+              <v-list-item
+                prepend-icon="mdi-account-clock-outline"
+                title="Last login"
+                :subtitle="formatDateTime(detail.user.lastLoginAt)"
+              />
+              <v-list-item
+                prepend-icon="mdi-calendar-plus"
+                title="First seen"
+                :subtitle="formatDateTime(detail.user.firstSeenAt)"
+              />
               <v-list-item
                 :prepend-icon="detail.user.platform === 'ios' ? 'mdi-apple' : 'mdi-android'"
                 title="Device"
-                :subtitle="[detail.user.deviceModel, detail.user.appVersion && `app v${detail.user.appVersion}`].filter(Boolean).join(' · ') || '—'"
+                :subtitle="
+                  [detail.user.deviceModel, detail.user.appVersion && `app v${detail.user.appVersion}`]
+                    .filter(Boolean)
+                    .join(' · ') || '—'
+                "
               />
             </v-list>
           </v-card>
 
           <v-row class="mt-1" dense>
-            <v-col v-for="s in [
-              { label: 'Actions', value: detail.summary.totalEvents, icon: 'mdi-lightning-bolt' },
-              { label: 'Sessions', value: detail.summary.sessions, icon: 'mdi-timer-outline' },
-              { label: 'Screens', value: detail.summary.screenViews, icon: 'mdi-cellphone-screenshot' },
-              { label: 'Taps', value: detail.summary.taps, icon: 'mdi-gesture-tap' },
-              { label: 'Failed', value: detail.summary.failed, icon: 'mdi-alert-circle-outline' },
-              { label: 'Logins', value: detail.user.loginCount, icon: 'mdi-login' },
-            ]" :key="s.label" cols="6">
+            <v-col
+              v-for="s in [
+                { label: 'Actions', value: detail.summary.totalEvents, icon: 'mdi-lightning-bolt' },
+                { label: 'Sessions', value: detail.summary.sessions, icon: 'mdi-timer-outline' },
+                { label: 'Screens', value: detail.summary.screenViews, icon: 'mdi-cellphone-screenshot' },
+                { label: 'Taps', value: detail.summary.taps, icon: 'mdi-gesture-tap' },
+                { label: 'Failed', value: detail.summary.failed, icon: 'mdi-alert-circle-outline' },
+                { label: 'Logins', value: detail.user.loginCount, icon: 'mdi-login' },
+              ]"
+              :key="s.label"
+              cols="6"
+            >
               <v-card class="bordered">
                 <v-card-text class="pa-3">
                   <v-icon :icon="s.icon" size="18" color="primary" />
@@ -226,14 +260,18 @@ useLive().onEvents(({ user, events: incoming }) => {
                 <span v-if="f.failed" class="text-error font-weight-bold">{{ f.failed }} ✕</span>
                 <strong>{{ f.uses }}</strong>
               </button>
-              <div v-if="!userFeatures.length" class="text-body-2 text-medium-emphasis pa-2">No app features used yet</div>
+              <div v-if="!userFeatures.length" class="text-body-2 text-medium-emphasis pa-2">
+                No app features used yet
+              </div>
             </div>
           </v-card>
 
           <v-card class="bordered mt-3">
             <v-card-item prepend-icon="mdi-package-variant">
               <v-card-title class="text-subtitle-1 font-weight-bold">Packages &amp; data</v-card-title>
-              <v-card-subtitle v-if="detail.user.packagesUpdatedAt">Checked {{ timeAgo(detail.user.packagesUpdatedAt) }} in the app</v-card-subtitle>
+              <v-card-subtitle v-if="detail.user.packagesUpdatedAt"
+                >Checked {{ timeAgo(detail.user.packagesUpdatedAt) }} in the app</v-card-subtitle
+              >
             </v-card-item>
             <v-card-text v-if="detail.user.activePackages?.length" class="pt-0">
               <div class="data-total">
@@ -276,7 +314,9 @@ useLive().onEvents(({ user, events: incoming }) => {
             </v-card-item>
             <v-list density="compact">
               <v-list-item v-for="s in detail.topScreens" :key="s.name" :title="s.name">
-                <template #append><v-chip size="small" variant="tonal">{{ s.count }}</v-chip></template>
+                <template #append
+                  ><v-chip size="small" variant="tonal">{{ s.count }}</v-chip></template
+                >
               </v-list-item>
               <v-list-item v-if="!detail.topScreens.length" subtitle="No screens yet" />
             </v-list>
@@ -366,7 +406,9 @@ useLive().onEvents(({ user, events: incoming }) => {
           <v-card-actions class="pa-4 pt-0">
             <v-spacer />
             <v-btn variant="text" class="text-none" @click="editOpen = false">Cancel</v-btn>
-            <v-btn color="secondary" variant="flat" class="text-none" :loading="editSaving" @click="saveEdit">Save</v-btn>
+            <v-btn color="secondary" variant="flat" class="text-none" :loading="editSaving" @click="saveEdit"
+              >Save</v-btn
+            >
           </v-card-actions>
         </v-card>
       </v-dialog>
@@ -375,10 +417,38 @@ useLive().onEvents(({ user, events: incoming }) => {
 </template>
 
 <style scoped>
-.uf-list { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 2px; }
-.uf-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; font-size: 0.9rem; cursor: pointer; }
-.uf-item:hover { background: rgba(var(--v-theme-on-surface), 0.05); }
-.uf-item.on { background: rgba(var(--v-theme-primary), 0.16); font-weight: 700; }
-.data-total { display: flex; align-items: flex-end; justify-content: space-between; padding: 12px 14px; margin-bottom: 10px; border-radius: 12px; background: rgba(var(--v-theme-primary), 0.12); }
-.pkg + .pkg { margin-top: 12px; }
+.uf-list {
+  padding: 0 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.uf-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.uf-item:hover {
+  background: rgba(var(--v-theme-on-surface), 0.05);
+}
+.uf-item.on {
+  background: rgba(var(--v-theme-primary), 0.16);
+  font-weight: 700;
+}
+.data-total {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  border-radius: 12px;
+  background: rgba(var(--v-theme-primary), 0.12);
+}
+.pkg + .pkg {
+  margin-top: 12px;
+}
 </style>

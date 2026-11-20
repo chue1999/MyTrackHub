@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { BRANDING_DEFAULTS as BRANDING_DEFAULTS_, type Branding } from '~/composables/useBranding'
+import type { Branding } from '~/types/api'
+import { BRANDING_DEFAULTS as BRANDING_DEFAULTS_ } from '~/composables/useBranding'
 interface Retention {
   enabled: boolean
   months: number
@@ -36,8 +37,8 @@ async function load() {
   error.value = ''
   try {
     apply(await api<Retention>('/settings/retention'))
-  } catch (e: any) {
-    error.value = e?.data?.message || 'Could not load the settings'
+  } catch (e) {
+    error.value = errorMessage(e, 'Could not load the settings')
   } finally {
     loading.value = false
   }
@@ -59,14 +60,18 @@ watch(
   },
 )
 const shown = computed(() => preview.value ?? info.value?.preview ?? null)
-const changed = computed(() => !!info.value && (form.enabled !== info.value.enabled || form.months !== info.value.months))
+const changed = computed(
+  () => !!info.value && (form.enabled !== info.value.enabled || form.months !== info.value.months),
+)
 const MONTH_ITEMS = computed(() =>
   (info.value?.monthOptions ?? [1, 2, 3, 4, 6, 12]).map((m) => ({
     value: m,
     title: m % 12 === 0 ? `${m / 12} year${m > 12 ? 's' : ''} (${m} months)` : `${m} month${m > 1 ? 's' : ''}`,
   })),
 )
-const keepText = computed(() => MONTH_ITEMS.value.find((i) => i.value === form.months)?.title ?? `${form.months} months`)
+const keepText = computed(
+  () => MONTH_ITEMS.value.find((i) => i.value === form.months)?.title ?? `${form.months} months`,
+)
 
 function askSave() {
   // Turning it on (or shortening the period) deletes logs right away, so confirm first.
@@ -79,12 +84,21 @@ async function save() {
   saving.value = true
   try {
     const before = info.value?.total ?? 0
-    apply(await api<Retention>('/settings/retention', { method: 'PUT', body: { enabled: form.enabled, months: form.months } }))
+    apply(
+      await api<Retention>('/settings/retention', {
+        method: 'PUT',
+        body: { enabled: form.enabled, months: form.months },
+      }),
+    )
     preview.value = null
     const deleted = Math.max(0, before - (info.value?.total ?? 0))
-    Object.assign(snack, { show: true, color: 'success', text: deleted ? `Saved. Deleted ${deleted.toLocaleString()} old logs` : 'Saved' })
-  } catch (e: any) {
-    Object.assign(snack, { show: true, color: 'error', text: e?.data?.message || 'Could not save' })
+    Object.assign(snack, {
+      show: true,
+      color: 'success',
+      text: deleted ? `Saved. Deleted ${deleted.toLocaleString()} old logs` : 'Saved',
+    })
+  } catch (e) {
+    Object.assign(snack, { show: true, color: 'error', text: errorMessage(e, 'Could not save') })
   } finally {
     saving.value = false
   }
@@ -97,9 +111,13 @@ async function runNow() {
     apply(await api<Retention>('/settings/retention/run', { method: 'POST' }))
     preview.value = null
     const n = info.value?.lastRun?.deleted ?? 0
-    Object.assign(snack, { show: true, color: 'success', text: n ? `Deleted ${n.toLocaleString()} old logs` : 'Nothing to delete' })
-  } catch (e: any) {
-    Object.assign(snack, { show: true, color: 'error', text: e?.data?.message || 'Could not delete' })
+    Object.assign(snack, {
+      show: true,
+      color: 'success',
+      text: n ? `Deleted ${n.toLocaleString()} old logs` : 'Nothing to delete',
+    })
+  } catch (e) {
+    Object.assign(snack, { show: true, color: 'error', text: errorMessage(e, 'Could not delete') })
   } finally {
     running.value = false
   }
@@ -115,10 +133,14 @@ const logoSaving = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 const shownLogo = computed(() => (logoDraft.value === undefined ? branding.value.logo : logoDraft.value))
 const names = reactive({ name: '', subtitle: '', title: '' })
-const resetNames = () => Object.assign(names, { name: branding.value.name, subtitle: branding.value.subtitle, title: branding.value.title })
+const resetNames = () =>
+  Object.assign(names, { name: branding.value.name, subtitle: branding.value.subtitle, title: branding.value.title })
 watch(() => [branding.value.name, branding.value.subtitle, branding.value.title], resetNames, { immediate: true })
 const namesChanged = computed(
-  () => names.name.trim() !== branding.value.name || names.subtitle.trim() !== branding.value.subtitle || names.title.trim() !== branding.value.title,
+  () =>
+    names.name.trim() !== branding.value.name ||
+    names.subtitle.trim() !== branding.value.subtitle ||
+    names.title.trim() !== branding.value.title,
 )
 const logoChanged = computed(
   () => (logoDraft.value !== undefined && logoDraft.value !== branding.value.logo) || namesChanged.value,
@@ -134,7 +156,11 @@ function cancelBrand() {
 }
 function useDefaults() {
   logoDraft.value = null
-  Object.assign(names, { name: BRANDING_DEFAULTS.name, subtitle: BRANDING_DEFAULTS.subtitle, title: BRANDING_DEFAULTS.title })
+  Object.assign(names, {
+    name: BRANDING_DEFAULTS.name,
+    subtitle: BRANDING_DEFAULTS.subtitle,
+    title: BRANDING_DEFAULTS.title,
+  })
 }
 
 function readAsDataUrl(file: File) {
@@ -196,15 +222,28 @@ async function saveLogo() {
   try {
     for (const k of ['name', 'subtitle', 'title'] as const) {
       const ok = nameRules[k](names[k])
-      if (ok !== true) throw { data: { message: `${k === 'title' ? 'Browser tab title' : k === 'name' ? 'Website name' : 'Subtitle'}: ${ok}` } }
+      if (ok !== true)
+        throw {
+          data: {
+            message: `${k === 'title' ? 'Browser tab title' : k === 'name' ? 'Website name' : 'Subtitle'}: ${ok}`,
+          },
+        }
     }
-    const body: Record<string, unknown> = { name: names.name.trim(), subtitle: names.subtitle.trim(), title: names.title.trim() }
+    const body: Record<string, unknown> = {
+      name: names.name.trim(),
+      subtitle: names.subtitle.trim(),
+      title: names.title.trim(),
+    }
     if (logoDraft.value !== undefined) body.logo = logoDraft.value
     branding.value = { ...BRANDING_DEFAULTS, ...(await api<Branding>('/settings/branding', { method: 'PUT', body })) }
     logoDraft.value = undefined
-    Object.assign(snack, { show: true, color: 'success', text: 'Saved: the sidebar, login page and browser tab are updated' })
-  } catch (e: any) {
-    logoError.value = e?.data?.message || 'Could not save'
+    Object.assign(snack, {
+      show: true,
+      color: 'success',
+      text: 'Saved: the sidebar, login page and browser tab are updated',
+    })
+  } catch (e) {
+    logoError.value = errorMessage(e, 'Could not save')
   } finally {
     logoSaving.value = false
   }
@@ -229,7 +268,9 @@ onMounted(loadBranding)
         <div class="head-icon"><v-icon icon="mdi-image-outline" size="26" /></div>
         <div class="flex-grow-1">
           <div class="text-h6 font-weight-black">Website name &amp; logo</div>
-          <div class="text-body-2 text-medium-emphasis">Shown in the sidebar, on the login page and in the browser tab</div>
+          <div class="text-body-2 text-medium-emphasis">
+            Shown in the sidebar, on the login page and in the browser tab
+          </div>
         </div>
       </div>
 
@@ -247,7 +288,13 @@ onMounted(loadBranding)
               <v-icon icon="mdi-upload" size="18" /> {{ shownLogo ? 'Change logo' : 'Upload logo' }}
             </div>
           </button>
-          <input ref="fileInput" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden @change="pickLogo" />
+          <input
+            ref="fileInput"
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/svg+xml"
+            hidden
+            @change="pickLogo"
+          />
 
           <!-- where it appears -->
           <div class="flex-grow-1" style="min-width: 0">
@@ -307,7 +354,15 @@ onMounted(loadBranding)
             <div class="text-caption text-medium-emphasis mt-3">
               PNG, JPG, WEBP or SVG. A square picture looks best; others are fitted into a square automatically.
             </div>
-            <v-alert v-if="logoError" type="error" variant="tonal" density="compact" rounded="lg" class="mt-3" :text="logoError" />
+            <v-alert
+              v-if="logoError"
+              type="error"
+              variant="tonal"
+              density="compact"
+              rounded="lg"
+              class="mt-3"
+              :text="logoError"
+            />
             <div v-if="branding.updatedBy" class="text-caption text-medium-emphasis mt-2">
               Last changed by {{ branding.updatedBy }} {{ timeAgo(branding.updatedAt) }}
             </div>
@@ -329,8 +384,18 @@ onMounted(loadBranding)
             Use defaults
           </v-btn>
           <v-spacer />
-          <v-btn variant="text" class="text-none" :disabled="!logoChanged || logoSaving" @click="cancelBrand">Cancel</v-btn>
-          <v-btn color="primary" variant="flat" class="text-none px-6" prepend-icon="mdi-content-save-outline" :loading="logoSaving" :disabled="!logoChanged" @click="saveLogo">
+          <v-btn variant="text" class="text-none" :disabled="!logoChanged || logoSaving" @click="cancelBrand"
+            >Cancel</v-btn
+          >
+          <v-btn
+            color="primary"
+            variant="flat"
+            class="text-none px-6"
+            prepend-icon="mdi-content-save-outline"
+            :loading="logoSaving"
+            :disabled="!logoChanged"
+            @click="saveLogo"
+          >
             Save
           </v-btn>
         </v-card-actions>
@@ -342,9 +407,18 @@ onMounted(loadBranding)
         <div class="head-icon"><v-icon icon="mdi-delete-clock-outline" size="26" /></div>
         <div class="flex-grow-1">
           <div class="text-h6 font-weight-black">Auto delete old logs</div>
-          <div class="text-body-2 text-medium-emphasis">Logs older than the chosen period are deleted automatically every hour</div>
+          <div class="text-body-2 text-medium-emphasis">
+            Logs older than the chosen period are deleted automatically every hour
+          </div>
         </div>
-        <v-switch v-model="form.enabled" :disabled="!canEdit || loading" color="success" inset hide-details :label="form.enabled ? 'On' : 'Off'" />
+        <v-switch
+          v-model="form.enabled"
+          :disabled="!canEdit || loading"
+          color="success"
+          inset
+          hide-details
+          :label="form.enabled ? 'On' : 'Off'"
+        />
       </div>
 
       <v-divider />
@@ -362,7 +436,9 @@ onMounted(loadBranding)
               density="comfortable"
             />
             <div class="text-caption text-medium-emphasis mt-2">
-              <template v-if="form.enabled">Every log older than {{ keepText }} is deleted for good. It cannot be brought back.</template>
+              <template v-if="form.enabled"
+                >Every log older than {{ keepText }} is deleted for good. It cannot be brought back.</template
+              >
               <template v-else>Auto delete is off: all logs are kept forever.</template>
             </div>
           </v-col>
@@ -387,9 +463,12 @@ onMounted(loadBranding)
           <v-icon icon="mdi-history" size="18" />
           <span v-if="info?.lastRun">
             Last clean-up {{ timeAgo(info.lastRun.at) }} ({{ formatDateTime(info.lastRun.at) }}):
-            <strong>{{ info.lastRun.deleted.toLocaleString() }}</strong> logs deleted, older than {{ info.lastRun.months }} months
+            <strong>{{ info.lastRun.deleted.toLocaleString() }}</strong> logs deleted, older than
+            {{ info.lastRun.months }} months
             <span class="text-medium-emphasis">· by {{ info.lastRun.by }}</span>
-            <span v-if="info?.updatedBy" class="text-medium-emphasis"> · setting changed by {{ info.updatedBy }} {{ timeAgo(info.updatedAt) }}</span>
+            <span v-if="info?.updatedBy" class="text-medium-emphasis">
+              · setting changed by {{ info.updatedBy }} {{ timeAgo(info.updatedAt) }}</span
+            >
           </span>
           <span v-else>No clean-up has run yet</span>
         </div>
@@ -411,8 +490,18 @@ onMounted(loadBranding)
         </v-btn>
         <span v-if="changed" class="text-caption text-medium-emphasis">Save first to delete with the new period</span>
         <v-spacer />
-        <v-btn variant="text" class="text-none" :disabled="!changed || saving" @click="info && apply(info)">Cancel</v-btn>
-        <v-btn color="primary" variant="flat" class="text-none px-6" prepend-icon="mdi-content-save-outline" :loading="saving" :disabled="!changed" @click="askSave">
+        <v-btn variant="text" class="text-none" :disabled="!changed || saving" @click="info && apply(info)"
+          >Cancel</v-btn
+        >
+        <v-btn
+          color="primary"
+          variant="flat"
+          class="text-none px-6"
+          prepend-icon="mdi-content-save-outline"
+          :loading="saving"
+          :disabled="!changed"
+          @click="askSave"
+        >
           Save
         </v-btn>
       </v-card-actions>
@@ -424,8 +513,8 @@ onMounted(loadBranding)
           <v-icon icon="mdi-alert-circle-outline" color="error" /> Delete old logs?
         </v-card-title>
         <v-card-text>
-          <strong>{{ (shown?.willDelete ?? 0).toLocaleString() }}</strong> logs older than {{ keepText }}
-          (before {{ shown ? formatDateTime(shown.cutoff) : '' }}) will be deleted for good. This cannot be undone.
+          <strong>{{ (shown?.willDelete ?? 0).toLocaleString() }}</strong> logs older than {{ keepText }} (before
+          {{ shown ? formatDateTime(shown.cutoff) : '' }}) will be deleted for good. This cannot be undone.
           <div class="mt-2 text-medium-emphasis">Tip: export them on the Reports page first if you need a copy.</div>
         </v-card-text>
         <v-card-actions>
@@ -438,7 +527,9 @@ onMounted(loadBranding)
       </v-card>
     </v-dialog>
 
-    <v-snackbar v-model="snack.show" :color="snack.color" timeout="3500" location="bottom right">{{ snack.text }}</v-snackbar>
+    <v-snackbar v-model="snack.show" :color="snack.color" timeout="3500" location="bottom right">{{
+      snack.text
+    }}</v-snackbar>
   </div>
 </template>
 
@@ -523,7 +614,9 @@ onMounted(loadBranding)
   align-items: center;
   gap: 12px;
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
 }
 .drop:not(:disabled):hover {
   border-color: #fcd021;

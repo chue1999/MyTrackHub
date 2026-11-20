@@ -1,54 +1,118 @@
 # MyTPlus Activity Tracking
 
-Records who logs in to the MyTPlus app (phone number, first name, last name)
-and what they do (screens opened, buttons tapped), and shows it on an admin
-website.
+Records who logs in to the MyTPlus mobile app (phone number, first name, last
+name) and everything they do (screens, taps, every API call with its request,
+response and result), and shows it live on an admin website.
 
 ```
-MyTPlus app ──(x-api-key)──▶ api/  (Node + Express + Sequelize) ──▶ PostgreSQL
-                                   ▲
-admin/ (Nuxt 4 + Vuetify) ──(JWT)──┘
+MyTPlus app ──(x-api-key)──▶  api/   Node.js · Express · Sequelize ──▶ PostgreSQL
+                                ▲  │
+admin/  Nuxt 4 · Vuetify ─(JWT)─┘  └─(Server-Sent Events: live updates)─▶ admin/
 ```
 
-## 1. API
+| Folder   | What it is                  | Stack                                                       |
+| -------- | --------------------------- | ----------------------------------------------------------- |
+| `api/`   | REST API + real-time stream | Node.js ≥ 20, Express 4, Sequelize 6, PostgreSQL, zod, pino |
+| `admin/` | Admin website (single-page) | Nuxt 4, Vue 3, Vuetify 3, TypeScript (strict)               |
+
+---
+
+## Quick start
 
 ```bash
+# 1. API
 cd api
-cp .env.example .env      # then fill in DB_PASSWORD, APP_API_KEY, JWT_SECRET, ADMIN_PASSWORD
+cp .env.example .env        # fill in DB_PASSWORD, APP_API_KEY, JWT_SECRET, ADMIN_PASSWORD
 npm install
-npm run dev               # http://localhost:4000
+npm run dev                 # http://localhost:4000
+
+# 2. Admin website (second terminal)
+cd admin
+cp .env.example .env        # NUXT_PUBLIC_API_BASE=http://localhost:4000
+npm install
+npm run dev                 # http://localhost:3000
 ```
 
 On start the API creates the database (if missing) and all tables
-automatically (Sequelize `sync`), and creates the first admin account from
-`ADMIN_USERNAME` / `ADMIN_PASSWORD`.
-
-Create another admin or reset a password:
+(Sequelize `sync`), and the first admin account from `ADMIN_USERNAME` /
+`ADMIN_PASSWORD`. Create another admin or reset a password:
 
 ```bash
-npm run seed:admin -- <username> <password> [display name]
+cd api && npm run seed:admin -- <username> <password> [display name]
 ```
 
-### Tables
+---
 
-| Table       | What it holds |
-|-------------|---------------|
-| `app_users` | One row per phone number: name, device, app version, login count, first/last seen |
-| `events`    | One row per action: `login`, `logout`, `screen_view`, `tap`, `action`, `api`, `error` + screen, properties, time, session, device |
-| `admins`    | Admin website accounts (bcrypt-hashed passwords) |
+## API (`api/`)
 
-### Endpoints
+### Structure
 
-| Method | Path | Auth | Purpose |
-|--------|------|------|---------|
-| POST | `/api/v1/track` | `x-api-key` | App sends a batch of up to 100 events |
-| POST | `/api/admin/auth/login` | – | Admin login → JWT |
-| GET | `/api/admin/auth/me` | JWT | Current admin |
-| GET | `/api/admin/stats/overview?days=14` | JWT | Dashboard numbers, daily trend, top screens/taps |
-| GET | `/api/admin/users?search=&page=&pageSize=&sort=` | JWT | Search users by phone or name |
-| GET | `/api/admin/users/:id` | JWT | One user's profile and summary |
-| GET | `/api/admin/events?userId=&type=&search=&from=&to=&page=` | JWT | Timeline / activity log |
-| GET | `/health` | – | Health check |
+Layered architecture: each request goes **route → middleware → controller →
+service → model**. Controllers only translate HTTP; business rules and SQL
+live in services.
+
+```
+api/
+├── src/
+│   ├── server.js            entry point: DB → first admin → jobs → HTTP, graceful shutdown
+│   ├── app.js               Express app factory (security headers, logging, routes, errors)
+│   ├── config/              environment variables, validated with zod at start-up
+│   ├── db/                  Sequelize connection, database auto-creation
+│   ├── models/              one file per table + associations (index.js)
+│   ├── routes/              URL → controller; admin/ holds one file per resource
+│   ├── middlewares/         auth (app key, JWT, roles), validation, rate limits, errors
+│   ├── validators/          zod schemas for request bodies
+│   ├── controllers/         thin HTTP handlers
+│   ├── services/            business logic and SQL (stats, tracking, retention, live stream…)
+│   ├── jobs/                background jobs (hourly log clean-up)
+│   ├── utils/               logger, HttpError, query helpers, JWT, data sanitising
+│   └── scripts/             CLI tools (create-admin)
+├── tests/                   unit tests (no database)
+│   └── integration/         end-to-end tests against a real PostgreSQL test database
+└── eslint.config.js · .prettierrc.json · .env.example
+```
+
+### Scripts
+
+| Command                     | What it does                                                                         |
+| --------------------------- | ------------------------------------------------------------------------------------ |
+| `npm run dev`               | Start with auto-restart on file changes                                              |
+| `npm start`                 | Start in production mode (JSON logs)                                                 |
+| `npm test`                  | Unit tests                                                                           |
+| `npm run test:integration`  | API tests on a real database (**wipes** `DB_NAME`, default `mytplus_tracking_test`) |
+| `npm run lint` / `lint:fix` | ESLint                                                                               |
+| `npm run format`            | Prettier                                                                             |
+| `npm run check`             | Lint + format check + unit tests (run before committing)                             |
+
+### Endpoints (v1)
+
+Admin endpoints need `Authorization: Bearer <token>` from the login. Errors
+always look like `{ "message": "…", "code": "NOT_FOUND" }` (validation errors
+add `issues`).
+
+| Method                      | Path                                   | Who               | Purpose                                                                     |
+| --------------------------- | -------------------------------------- | ----------------- | --------------------------------------------------------------------------- |
+| GET                         | `/health`                              | –                 | Health check (database included)                                            |
+| POST                        | `/api/v1/track`                        | app (`x-api-key`) | A batch of up to 100 events                                                 |
+| GET                         | `/api/v1/public/branding`              | –                 | Website name & logo                                                         |
+| POST                        | `/api/v1/admin/auth/login`             | –                 | Log in → JWT                                                                |
+| GET                         | `/api/v1/admin/auth/me`                | any admin         | Current account                                                             |
+| POST                        | `/api/v1/admin/auth/password`          | any admin         | Change own password                                                         |
+| GET                         | `/api/v1/admin/stats/overview`         | any admin         | Dashboard                                                                   |
+| GET                         | `/api/v1/admin/stats/packages`         | any admin         | Packages sold, revenue, data left                                           |
+| GET                         | `/api/v1/admin/stats/features`         | any admin         | Usage of every app feature                                                  |
+| GET                         | `/api/v1/admin/users`                  | any admin         | Search users (`search`, `sort`, `from`, `to`, `page`, `pageSize`)           |
+| GET / PATCH                 | `/api/v1/admin/users/:id`              | any / admin       | One user / edit name & note                                                 |
+| GET                         | `/api/v1/admin/events`                 | any admin         | Activity log (`userId`, `type`, `apis`, `success`, `search`, `from`, `to`…) |
+| GET                         | `/api/v1/admin/events/:id`             | any admin         | One action with full details                                                |
+| GET / POST / PATCH / DELETE | `/api/v1/admin/accounts[/:id]`         | admin             | Admin accounts                                                              |
+| GET / PUT                   | `/api/v1/admin/settings/retention`     | any / admin       | Auto delete old logs                                                        |
+| POST                        | `/api/v1/admin/settings/retention/run` | admin             | Delete old logs now                                                         |
+| GET / PUT                   | `/api/v1/admin/settings/branding`      | any / admin       | Website name & logo                                                         |
+| POST                        | `/api/v1/admin/stream/ticket`          | any admin         | One-time ticket for the live stream                                         |
+| GET                         | `/api/v1/admin/stream?ticket=`         | ticket            | Live updates (Server-Sent Events)                                           |
+
+`/api/admin/*` and `/api/public/*` still work as aliases for older clients.
 
 Track payload:
 
@@ -57,74 +121,98 @@ Track payload:
   "msisdn": "2055551234",
   "firstName": "Somsack",
   "lastName": "Phommachanh",
-  "deviceId": "…", "platform": "android", "appVersion": "3.0.1", "deviceModel": "Pixel 7",
+  "deviceId": "…",
+  "platform": "android",
+  "appVersion": "3.0.1",
+  "deviceModel": "Pixel 7",
   "events": [
     { "type": "login", "name": "login", "sessionId": "…", "occurredAt": "2026-11-20T03:00:00Z" },
-    { "type": "tap", "name": "Points", "screen": "ServicesPage", "properties": { "route": "/points" } }
+    {
+      "type": "api",
+      "name": "POST /tplus/TransferBalance",
+      "success": true,
+      "result": "Success",
+      "properties": { "request": { "body": { "Receiver": "2077778888", "TransferAmount": "5000" } } }
+    }
   ]
 }
 ```
 
-### Privacy safeguards
+### Tables
+
+| Table       | What it holds                                                                                       |
+| ----------- | --------------------------------------------------------------------------------------------------- |
+| `app_users` | One row per phone number: name, device, app version, login count, first/last seen, active packages |
+| `events`    | One row per action: `login`, `logout`, `screen_view`, `tap`, `action`, `api`, `error`               |
+| `admins`    | Admin website accounts (bcrypt-hashed passwords, role `admin` or `viewer`)                          |
+| `settings`  | Settings changed on the website (log retention, name & logo)                                        |
+
+### Security & privacy
 
 - Property keys that look like secrets (`password`, `otp`, `pin`, `token`,
   `secret`, `cvv`, `card number`…) are dropped before saving.
-- Events older than `RETENTION_DAYS` (default 180) are deleted daily.
-- The admin website needs a login; the app key only allows *sending* events.
+- Old logs are deleted automatically (default: older than 4 months; change
+  it on **Settings → Auto delete old logs**).
+- Helmet security headers, CORS limited to `CORS_ORIGINS`, rate limits on
+  login and tracking, constant-time API key check, secrets redacted from logs.
+- Disabled admin accounts lose access immediately.
 - Tell users about this tracking in the app's privacy policy.
 
-## 2. Admin website
+---
 
-```bash
-cd admin
-cp .env.example .env      # NUXT_PUBLIC_API_BASE=http://localhost:4000
-npm install
-npm run dev               # http://localhost:3000
+## Admin website (`admin/`)
+
+### Structure
+
+```
+admin/
+├── app/
+│   ├── pages/            one file per URL (Nuxt file-based routing)
+│   ├── layouts/          the sidebar + top bar shell
+│   ├── components/
+│   │   ├── charts/       Pie3D, ColumnChart, HBarChart, SplitBar
+│   │   ├── data/         DataView (JSON → tables), EventTable
+│   │   ├── common/       StatCard, DateRange, BrandMark
+│   │   └── layout/       GlobalSearch, ChangePasswordDialog
+│   ├── composables/      useApi, useAuth, useLive (real-time), useBranding
+│   ├── types/            API data types (api.ts)
+│   ├── utils/            formatting, app-feature catalogue, reports, Excel export, errors
+│   ├── middleware/       login guard
+│   ├── plugins/          branding (browser tab title & icon)
+│   └── assets/           global CSS (fonts, chart colours)
+└── nuxt.config.ts · eslint.config.mjs · .prettierrc.json · tsconfig.json
 ```
 
-Pages: **Dashboard** (users, active today, logins, daily trend, most opened
-screens and tapped buttons), **Users** (search by phone/name), **User detail**
-(profile, devices, favourite screens, full activity timeline), **Activity log**
-(all events with filters).
+Components keep their plain names in templates (`<Pie3D>`, `<DataView>`)
+whatever folder they are in.
 
-Production: `npm run build` → `node .output/server/index.mjs` (or
-`npm run generate` and serve `.output/public` as static files). Add the
-website's URL to `CORS_ORIGINS` in `api/.env`.
+### Scripts
 
-## 3. Flutter app
+| Command                   | What it does                                       |
+| ------------------------- | -------------------------------------------------- |
+| `npm run dev`             | Development server on http://localhost:3000        |
+| `npm run build`           | Production build (`node .output/server/index.mjs`) |
+| `npm run generate`        | Static build (serve `.output/public`)              |
+| `npm run typecheck`       | TypeScript check (strict)                          |
+| `npm run lint` / `format` | ESLint / Prettier                                  |
+| `npm run check`           | Lint + format check + typecheck                    |
 
-The tracker lives in `lib/services/tracking/activity_tracker.dart` in the
-MyTPlus app. It is off unless built with:
+Production: set `NUXT_PUBLIC_API_BASE` to the API's public **https** URL and
+add the website's URL to `CORS_ORIGINS` in `api/.env`.
 
-```bash
-flutter run \
-  --dart-define=TRACKING_URL=http://<your-computer-ip>:4000 \
-  --dart-define=TRACKING_KEY=<APP_API_KEY from api/.env>
-```
+---
 
-(Use your computer's LAN IP, not `localhost`, when running on a phone; on
-the Android emulator use `http://10.0.2.2:4000`.)
+## Flutter app
 
-What it records automatically:
+The tracker lives in `lib/services/tracking/` of the MyTPlus app
+(`activity_tracker.dart`, `tracked_dio.dart`, `tracking_config.dart`).
 
-- **login**: after a successful login (`AuthBloc`)
-- **name/surname**: when the customer info loads on the home screen (`RefillBloc`)
-- **screen_view**: every page opened (navigator observer)
-- **tap**: every service button (`ServiceButton`)
-- **logout**: from Settings → Logout
-- **app_opened**: when the app comes back to the foreground
-- **api**: every API call the app makes (all `Dio` clients are created with
-  `trackedDio()`): method + path, status, duration. Bodies are never recorded,
-  and numbers/ids in paths are replaced (`/user/:num/history`).
-- Users already logged in are identified from the phone number the app saved
-  at login, so they show up without logging in again.
-
-Add your own anywhere:
-
-```dart
-ActivityTracker.instance.tap('Buy package', properties: {'package': code});
-ActivityTracker.instance.action('topup_success', properties: {'amount': 10000});
-```
-
-Events are queued on the phone, sent every 15 s in batches, and kept until
-sent, so nothing is lost when offline.
+- Debug builds find the API automatically: Android emulator → `10.0.2.2`,
+  iOS simulator → `localhost`, real phone over USB → `adb reverse` (set up by
+  the VS Code launch task), otherwise the computer's Wi-Fi IP.
+- Release builds send to `TrackingConfig.productionUrl` (tracking is off
+  while it is empty).
+- Every `Dio` client is created with `trackedDio()`, so every API call is
+  recorded with its request, response, duration and success/failure.
+- Events are queued on the phone and sent in batches, so nothing is lost
+  while offline.

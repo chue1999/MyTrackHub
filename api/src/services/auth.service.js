@@ -1,0 +1,46 @@
+import bcrypt from 'bcryptjs';
+import { config } from '../config/index.js';
+import { Admin } from '../models/index.js';
+import { HttpError } from '../utils/http-error.js';
+import { signAdminToken } from '../utils/jwt.js';
+import { logger } from '../utils/logger.js';
+
+export const BCRYPT_ROUNDS = 10;
+export const hashPassword = (password) => bcrypt.hash(password, BCRYPT_ROUNDS);
+
+/** Checks the credentials and returns a JWT plus the public account info. */
+export async function login({ username, password }) {
+  const admin = await Admin.scope('withPassword').findOne({ where: { username } });
+  if (!admin || !(await bcrypt.compare(password, admin.passwordHash))) {
+    throw new HttpError(401, 'Wrong username or password', 'INVALID_CREDENTIALS');
+  }
+  if (!admin.isActive) {
+    throw new HttpError(403, 'This account is disabled. Ask an administrator.', 'ACCOUNT_DISABLED');
+  }
+  await admin.update({ lastLoginAt: new Date() });
+  return {
+    token: signAdminToken(admin),
+    admin: { id: admin.id, username: admin.username, displayName: admin.displayName, role: admin.role },
+  };
+}
+
+/** Anyone can change their own password. */
+export async function changePassword(adminId, { currentPassword, newPassword }) {
+  const me = await Admin.scope('withPassword').findByPk(adminId);
+  if (!me || !(await bcrypt.compare(currentPassword, me.passwordHash))) {
+    throw HttpError.badRequest('Current password is wrong');
+  }
+  await me.update({ passwordHash: await hashPassword(newPassword) });
+}
+
+/** On first start, creates the admin account from ADMIN_USERNAME / ADMIN_PASSWORD. */
+export async function ensureFirstAdmin() {
+  if ((await Admin.count()) > 0) return;
+  const { username, password } = config.firstAdmin;
+  if (!password || password.startsWith('change-me')) {
+    logger.warn('No admin account yet. Set ADMIN_USERNAME / ADMIN_PASSWORD in .env and restart.');
+    return;
+  }
+  await Admin.create({ username, passwordHash: await hashPassword(password), displayName: 'Administrator' });
+  logger.info(`Created admin account "${username}"`);
+}

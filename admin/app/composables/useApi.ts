@@ -4,7 +4,7 @@ export function useApi() {
   const { token, logout } = useAuth()
 
   return $fetch.create({
-    baseURL: `${config.public.apiBase}/api/admin`,
+    baseURL: `${config.public.apiBase}/api/v1/admin`,
     onRequest({ options }) {
       if (token.value) {
         const headers = new Headers(options.headers as HeadersInit)
@@ -16,52 +16,4 @@ export function useApi() {
       if (response.status === 401) logout()
     },
   })
-}
-
-export interface Paged<T> {
-  items: T[]
-  total: number
-  page: number
-  pageSize: number
-}
-
-export interface AppUser {
-  id: string
-  msisdn: string
-  firstName: string | null
-  lastName: string | null
-  platform: string | null
-  appVersion: string | null
-  deviceModel: string | null
-  loginCount: number
-  firstSeenAt: string
-  lastSeenAt: string
-  lastLoginAt: string | null
-  note?: string | null
-  activePackages?: { name?: string; product?: string | number; totalMb?: number; usedMb?: number; remainMb?: number; expiry?: string }[] | null
-  dataRemainMb?: number | null
-  dataUsedMb?: number | null
-  packagesUpdatedAt?: string | null
-  actionCount?: number
-  failedCount?: number
-  packageCount?: number
-}
-
-export interface TrackedEvent {
-  id: string
-  userId: string | null
-  msisdn: string | null
-  sessionId: string | null
-  type: 'login' | 'logout' | 'screen_view' | 'tap' | 'action' | 'api' | 'error'
-  name: string
-  screen: string | null
-  properties: Record<string, unknown>
-  success: boolean | null
-  result: string | null
-  platform: string | null
-  appVersion: string | null
-  deviceModel: string | null
-  occurredAt: string
-  createdAt?: string
-  user?: Pick<AppUser, 'id' | 'msisdn' | 'firstName' | 'lastName'> | null
 }

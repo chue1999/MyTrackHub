@@ -1,9 +1,4 @@
-import type { AppUser, TrackedEvent } from '~/composables/useApi'
-
-export interface LiveEventsPayload {
-  user: AppUser | null
-  events: TrackedEvent[]
-}
+import type { LiveEventsPayload } from '~/types/api'
 
 type Handler = (payload: LiveEventsPayload) => void
 
@@ -38,9 +33,7 @@ export function useLive() {
     try {
       const { ticket } = await api<{ ticket: string }>('/stream/ticket', { method: 'POST' })
       if (!wanted) return
-      const es = new EventSource(
-        `${config.public.apiBase}/api/admin/stream?ticket=${encodeURIComponent(ticket)}`,
-      )
+      const es = new EventSource(`${config.public.apiBase}/api/v1/admin/stream?ticket=${encodeURIComponent(ticket)}`)
       source = es
       es.addEventListener('hello', () => (connected.value = true))
       // The logo was changed on the Settings page: reload it everywhere.

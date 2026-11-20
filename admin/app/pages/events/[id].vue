@@ -1,12 +1,16 @@
 <script setup lang="ts">
-import type { TrackedEvent } from '~/composables/useApi'
+import type { TrackedEvent, JsonRecord } from '~/types/api'
 
 const api = useApi()
 const route = useRoute()
 const router = useRouter()
 const id = computed(() => String(route.params.id))
 
-const { data: e, pending, error } = await useAsyncData(`event-${id.value}`, () => api<TrackedEvent>(`/events/${id.value}`), {
+const {
+  data: e,
+  pending,
+  error,
+} = await useAsyncData(`event-${id.value}`, () => api<TrackedEvent>(`/events/${id.value}`), {
   watch: [id],
 })
 
@@ -16,7 +20,7 @@ function goBack() {
   else navigateTo('/events')
 }
 
-const p = computed(() => (e.value?.properties ?? {}) as Record<string, any>)
+const p = computed(() => (e.value?.properties ?? {}) as JsonRecord)
 const isApi = computed(() => e.value?.type === 'api')
 const summary = computed(() => (e.value && isApi.value ? apiSummary(e.value) : []))
 const status = computed(() => {
@@ -32,13 +36,21 @@ const delaySec = computed(() => {
 const otherProps = computed(() => Object.entries(p.value).filter(([k]) => !['request', 'response'].includes(k)))
 const pretty = (v: unknown) => JSON.stringify(v, null, 2)
 
-interface TechItem { label: string; value: string; icon: string; mono?: boolean; wide?: boolean; small?: boolean }
+interface TechItem {
+  label: string
+  value: string
+  icon: string
+  mono?: boolean
+  wide?: boolean
+  small?: boolean
+}
 const techItems = computed<TechItem[]>(() => {
   const ev = e.value
   if (!ev) return []
   const items: TechItem[] = []
   const add = (label: string, value: unknown, icon: string, opts: Partial<TechItem> = {}) => {
-    if (value !== undefined && value !== null && value !== '') items.push({ label, value: String(value), icon, ...opts })
+    if (value !== undefined && value !== null && value !== '')
+      items.push({ label, value: String(value), icon, ...opts })
   }
   if (isApi.value) add('API', ev.name, 'mdi-api', { mono: true, wide: true })
   add('Server', p.value.host, 'mdi-server-network', { mono: true })
@@ -50,12 +62,18 @@ const techItems = computed<TechItem[]>(() => {
   if (!isApi.value && ev.type !== 'login') add('Name', ev.name, 'mdi-tag-outline', { mono: true })
   if (!isApi.value) {
     for (const [k, v] of otherProps.value) {
-      add(k === 'reason' ? 'Reason' : k, k === 'reason' ? logoutReason(v) || v : typeof v === 'object' ? JSON.stringify(v) : v, 'mdi-information-variant')
+      add(
+        k === 'reason' ? 'Reason' : k,
+        k === 'reason' ? logoutReason(v) || v : typeof v === 'object' ? JSON.stringify(v) : v,
+        'mdi-information-variant',
+      )
     }
   }
   add('Device', [ev.deviceModel, ev.platform].filter(Boolean).join(' · '), 'mdi-cellphone-information')
   add('App version', ev.appVersion && `v${ev.appVersion}`, 'mdi-application-outline')
-  add('Date & time', `${formatDateLong(ev.occurredAt)}, ${formatTime(ev.occurredAt)}`, 'mdi-calendar-clock', { wide: true })
+  add('Date & time', `${formatDateLong(ev.occurredAt)}, ${formatTime(ev.occurredAt)}`, 'mdi-calendar-clock', {
+    wide: true,
+  })
   if (ev.createdAt) add('Received by server', formatTime(ev.createdAt), 'mdi-cloud-check-outline', { mono: true })
   add('Session', ev.sessionId, 'mdi-identifier', { mono: true, wide: true, small: true })
   add('Action id', ev.id, 'mdi-pound', { mono: true })
@@ -77,7 +95,9 @@ async function copy(label: string, v: unknown) {
     await navigator.clipboard.writeText(pretty(v))
     copied.value = label
     setTimeout(() => (copied.value = ''), 1500)
-  } catch {}
+  } catch {
+    // Clipboard blocked by the browser: nothing to do.
+  }
 }
 
 const hasPayload = computed(() => !!(p.value.request || p.value.response))
@@ -92,7 +112,14 @@ useHead(() => ({ title: e.value ? eventTitle(e.value) : 'Action' }))
   <div class="detail">
     <!-- back + breadcrumb -->
     <div class="d-flex align-center flex-wrap ga-3 mb-5">
-      <v-btn variant="flat" color="surface" rounded="lg" prepend-icon="mdi-arrow-left" class="text-none back-btn" @click="goBack">
+      <v-btn
+        variant="flat"
+        color="surface"
+        rounded="lg"
+        prepend-icon="mdi-arrow-left"
+        class="text-none back-btn"
+        @click="goBack"
+      >
         Back
       </v-btn>
       <div class="crumbs">
@@ -102,7 +129,13 @@ useHead(() => ({ title: e.value ? eventTitle(e.value) : 'Action' }))
       </div>
     </div>
 
-    <v-alert v-if="error" type="error" variant="tonal" rounded="lg" :text="error.data?.message || 'Could not load this action'">
+    <v-alert
+      v-if="error"
+      type="error"
+      variant="tonal"
+      rounded="lg"
+      :text="errorMessage(error, 'Could not load this action')"
+    >
       <template #append>
         <v-btn variant="text" class="text-none" @click="goBack">Go back</v-btn>
       </template>
@@ -122,12 +155,18 @@ useHead(() => ({ title: e.value ? eventTitle(e.value) : 'Action' }))
           <h1 class="head-title">{{ eventTitle(e) }}</h1>
           <div class="head-meta">
             <span v-if="isApi && apiSummaryLine(e)" class="pill strong">{{ apiSummaryLine(e) }}</span>
-            <span class="pill"><v-icon icon="mdi-clock-outline" size="15" /> {{ formatTime(e.occurredAt) }} · {{ timeAgo(e.occurredAt) }}</span>
+            <span class="pill"
+              ><v-icon icon="mdi-clock-outline" size="15" /> {{ formatTime(e.occurredAt) }} ·
+              {{ timeAgo(e.occurredAt) }}</span
+            >
             <span v-if="p.ms != null" class="pill"><v-icon icon="mdi-timer-outline" size="15" /> {{ p.ms }} ms</span>
           </div>
         </div>
         <div class="head-status">
-          <v-icon :icon="status?.icon ?? (oldFormat ? 'mdi-help-circle-outline' : 'mdi-information-outline')" size="20" />
+          <v-icon
+            :icon="status?.icon ?? (oldFormat ? 'mdi-help-circle-outline' : 'mdi-information-outline')"
+            size="20"
+          />
           {{ status?.text ?? (oldFormat ? 'Result not recorded' : EVENT_META[e.type]?.label) }}
         </div>
       </section>
@@ -135,7 +174,10 @@ useHead(() => ({ title: e.value ? eventTitle(e.value) : 'Action' }))
       <!-- old app note (small) -->
       <div v-if="oldFormat" class="old-note">
         <v-icon icon="mdi-cellphone-arrow-down" size="18" />
-        <span>Recorded by an older version of the app, so there is no receiver, amount or result. Fully restart the app and repeat the action to see everything.</span>
+        <span
+          >Recorded by an older version of the app, so there is no receiver, amount or result. Fully restart the app and
+          repeat the action to see everything.</span
+        >
       </div>
 
       <!-- three key cards -->
@@ -160,7 +202,15 @@ useHead(() => ({ title: e.value ? eventTitle(e.value) : 'Action' }))
               <div class="key-sub text-mono phone">{{ formatPhone(e.user?.msisdn ?? e.msisdn) }}</div>
             </div>
           </div>
-          <v-btn v-if="e.user" :to="`/users/${e.user.id}`" variant="tonal" size="small" rounded="lg" class="text-none mt-3" append-icon="mdi-arrow-right">
+          <v-btn
+            v-if="e.user"
+            :to="`/users/${e.user.id}`"
+            variant="tonal"
+            size="small"
+            rounded="lg"
+            class="text-none mt-3"
+            append-icon="mdi-arrow-right"
+          >
             Open user
           </v-btn>
         </v-card>
@@ -172,7 +222,14 @@ useHead(() => ({ title: e.value ? eventTitle(e.value) : 'Action' }))
             {{ status?.text ?? (isApi ? 'Not recorded' : 'Done') }}
           </div>
           <div class="key-sub">
-            {{ e.result || (p.status ? `HTTP ${p.status}${p.resultCode != null ? ` · code ${p.resultCode}` : ''}` : (e.type === 'logout' ? logoutReason(p.reason) : '—')) }}
+            {{
+              e.result ||
+              (p.status
+                ? `HTTP ${p.status}${p.resultCode != null ? ` · code ${p.resultCode}` : ''}`
+                : e.type === 'logout'
+                  ? logoutReason(p.reason)
+                  : '—')
+            }}
           </div>
         </v-card>
       </div>
@@ -209,7 +266,13 @@ useHead(() => ({ title: e.value ? eventTitle(e.value) : 'Action' }))
                     <v-icon icon="mdi-code-json" size="16" /> JSON
                   </button>
                 </div>
-                <v-btn size="small" variant="text" class="text-none" :prepend-icon="copied === 'sent' ? 'mdi-check' : 'mdi-content-copy'" @click="copy('sent', p.request)">
+                <v-btn
+                  size="small"
+                  variant="text"
+                  class="text-none"
+                  :prepend-icon="copied === 'sent' ? 'mdi-check' : 'mdi-content-copy'"
+                  @click="copy('sent', p.request)"
+                >
                   {{ copied === 'sent' ? 'Copied' : 'Copy' }}
                 </v-btn>
               </template>
@@ -234,7 +297,13 @@ useHead(() => ({ title: e.value ? eventTitle(e.value) : 'Action' }))
                     <v-icon icon="mdi-code-json" size="16" /> JSON
                   </button>
                 </div>
-                <v-btn size="small" variant="text" class="text-none" :prepend-icon="copied === 'received' ? 'mdi-check' : 'mdi-content-copy'" @click="copy('received', p.response)">
+                <v-btn
+                  size="small"
+                  variant="text"
+                  class="text-none"
+                  :prepend-icon="copied === 'received' ? 'mdi-check' : 'mdi-content-copy'"
+                  @click="copy('received', p.response)"
+                >
                   {{ copied === 'received' ? 'Copied' : 'Copy' }}
                 </v-btn>
               </template>
@@ -289,7 +358,9 @@ useHead(() => ({ title: e.value ? eventTitle(e.value) : 'Action' }))
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
 .back-btn {
-  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.06), inset 0 0 0 1px rgba(17, 24, 39, 0.08);
+  box-shadow:
+    0 1px 2px rgba(17, 24, 39, 0.06),
+    inset 0 0 0 1px rgba(17, 24, 39, 0.08);
 }
 .crumbs {
   display: flex;
@@ -318,10 +389,18 @@ useHead(() => ({ title: e.value ? eventTitle(e.value) : 'Action' }))
   border-radius: 22px;
   color: #fff;
 }
-.head.ok { background: linear-gradient(120deg, #178a49, #2bbd6a); }
-.head.bad { background: linear-gradient(120deg, #b8322a, #e65a4f); }
-.head.neutral { background: linear-gradient(120deg, #2a2a30, #44444e); }
-.head.old { background: linear-gradient(120deg, #4b5563, #6b7280); }
+.head.ok {
+  background: linear-gradient(120deg, #178a49, #2bbd6a);
+}
+.head.bad {
+  background: linear-gradient(120deg, #b8322a, #e65a4f);
+}
+.head.neutral {
+  background: linear-gradient(120deg, #2a2a30, #44444e);
+}
+.head.old {
+  background: linear-gradient(120deg, #4b5563, #6b7280);
+}
 .head-glow {
   position: absolute;
   right: -100px;
@@ -387,9 +466,15 @@ useHead(() => ({ title: e.value ? eventTitle(e.value) : 'Action' }))
   background: #fff;
   color: #1a1a1a;
 }
-.head.ok .head-status { color: #1d8a4a; }
-.head.bad .head-status { color: #c0392b; }
-.head.old .head-status { color: #4b5563; }
+.head.ok .head-status {
+  color: #1d8a4a;
+}
+.head.bad .head-status {
+  color: #c0392b;
+}
+.head.old .head-status {
+  color: #4b5563;
+}
 
 .old-note {
   display: flex;
@@ -449,10 +534,17 @@ useHead(() => ({ title: e.value ? eventTitle(e.value) : 'Action' }))
   align-items: center;
   gap: 8px;
 }
-.result-ok .result-text { color: #1d8a4a; }
-.result-bad .result-text { color: #c0392b; }
+.result-ok .result-text {
+  color: #1d8a4a;
+}
+.result-bad .result-text {
+  color: #c0392b;
+}
 .result-old .result-text,
-.result-neutral .result-text { color: rgba(var(--v-theme-on-surface), 0.6); font-size: 1.5rem; }
+.result-neutral .result-text {
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  font-size: 1.5rem;
+}
 
 /* summary */
 .facts {
@@ -469,7 +561,9 @@ useHead(() => ({ title: e.value ? eventTitle(e.value) : 'Action' }))
   border-radius: 14px;
   background: rgba(var(--v-theme-on-surface), 0.04);
 }
-.fact > div { min-width: 0; }
+.fact > div {
+  min-width: 0;
+}
 .fact-label {
   font-size: 0.82rem;
   color: rgba(var(--v-theme-on-surface), 0.6);
@@ -499,9 +593,13 @@ useHead(() => ({ title: e.value ? eventTitle(e.value) : 'Action' }))
   background: rgba(var(--v-theme-on-surface), 0.04);
   min-width: 0;
 }
-.tech-item.wide { grid-column: span 2; }
+.tech-item.wide {
+  grid-column: span 2;
+}
 @media (max-width: 600px) {
-  .tech-item.wide { grid-column: auto; }
+  .tech-item.wide {
+    grid-column: auto;
+  }
 }
 .tech-label {
   display: flex;
@@ -517,8 +615,12 @@ useHead(() => ({ title: e.value ? eventTitle(e.value) : 'Action' }))
   font-weight: 700;
   word-break: break-word;
 }
-.tech-value.mono { font-family: var(--app-font); }
-.tech-value.small { font-size: 0.95rem; }
+.tech-value.mono {
+  font-family: var(--app-font);
+}
+.tech-value.small {
+  font-size: 0.95rem;
+}
 
 .json {
   font-family: var(--app-font);

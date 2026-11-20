@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AppUser, Paged } from '~/composables/useApi'
+import type { AppUser, Paged } from '~/types/api'
 
 const api = useApi()
 const route = useRoute()
@@ -66,6 +66,10 @@ function onOptions(o: { page: number; itemsPerPage: number }) {
   page.value = o.page
   pageSize.value = o.itemsPerPage
 }
+
+function openUser(_: unknown, { item }: { item: AppUser }) {
+  navigateTo(`/users/${item.id}`)
+}
 </script>
 
 <template>
@@ -103,7 +107,13 @@ function onOptions(o: { page: number; itemsPerPage: number }) {
         />
       </v-card-text>
 
-      <v-alert v-if="error" type="error" variant="tonal" class="mx-4" :text="error.data?.message || 'Could not load users'" />
+      <v-alert
+        v-if="error"
+        type="error"
+        variant="tonal"
+        class="mx-4"
+        :text="errorMessage(error, 'Could not load users')"
+      />
 
       <v-data-table-server
         :headers="headers"
@@ -115,7 +125,7 @@ function onOptions(o: { page: number; itemsPerPage: number }) {
         :items-per-page-options="[10, 20, 50, 100]"
         hover
         @update:options="onOptions"
-        @click:row="(_: unknown, { item }: { item: AppUser }) => navigateTo(`/users/${item.id}`)"
+        @click:row="openUser"
       >
         <template #item.name="{ item }">
           <div class="d-flex align-center ga-3 py-2" style="cursor: pointer">
@@ -126,23 +136,33 @@ function onOptions(o: { page: number; itemsPerPage: number }) {
           </div>
         </template>
         <template #item.msisdn="{ item }">
-          <span class="text-mono font-weight-bold phone" style="font-size: 0.95rem">{{ formatPhone(item.msisdn) }}</span>
+          <span class="text-mono font-weight-bold phone" style="font-size: 0.95rem">{{
+            formatPhone(item.msisdn)
+          }}</span>
         </template>
         <template #item.data="{ item }">
           <template v-if="item.packagesUpdatedAt">
-            <div class="font-weight-bold" :class="(item.dataRemainMb ?? 0) < 500 ? 'text-error' : ''">{{ formatMb(item.dataRemainMb) }}</div>
-            <div class="text-caption text-medium-emphasis">{{ item.packageCount }} package{{ item.packageCount === 1 ? '' : 's' }}</div>
+            <div class="font-weight-bold" :class="(item.dataRemainMb ?? 0) < 500 ? 'text-error' : ''">
+              {{ formatMb(item.dataRemainMb) }}
+            </div>
+            <div class="text-caption text-medium-emphasis">
+              {{ item.packageCount }} package{{ item.packageCount === 1 ? '' : 's' }}
+            </div>
           </template>
           <span v-else class="text-medium-emphasis">—</span>
         </template>
         <template #item.actions="{ item }">
           <div class="font-weight-bold">{{ (item.actionCount ?? 0).toLocaleString() }}</div>
-          <div v-if="item.failedCount" class="text-caption text-error font-weight-bold">{{ item.failedCount }} failed</div>
+          <div v-if="item.failedCount" class="text-caption text-error font-weight-bold">
+            {{ item.failedCount }} failed
+          </div>
         </template>
         <template #item.device="{ item }">
           <div class="d-flex align-center ga-1">
             <v-icon
-              :icon="item.platform === 'ios' ? 'mdi-apple' : item.platform === 'android' ? 'mdi-android' : 'mdi-cellphone'"
+              :icon="
+                item.platform === 'ios' ? 'mdi-apple' : item.platform === 'android' ? 'mdi-android' : 'mdi-cellphone'
+              "
               size="18"
             />
             <span class="text-body-2">{{ item.deviceModel || '—' }}</span>

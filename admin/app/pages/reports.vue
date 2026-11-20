@@ -52,12 +52,12 @@ async function load() {
   error.value = ''
   progress.value = { loaded: 0, total: 0 }
   try {
-    const res = await report.value.load(api as any, filters.value, (loaded, t) => (progress.value = { loaded, total: t }))
+    const res = await report.value.load(api, filters.value, (loaded, t) => (progress.value = { loaded, total: t }))
     rows.value = res.rows
     total.value = res.total
     loadedFor.value = stamp.value
-  } catch (e: any) {
-    error.value = e?.data?.message || 'Could not load the report'
+  } catch (e) {
+    error.value = errorMessage(e, 'Could not load the report')
   } finally {
     loading.value = false
   }
@@ -80,8 +80,8 @@ async function exportNow() {
       fileName: `mytplus-${report.value.key}-${day}.xlsx`,
       truncatedFrom: total.value > rows.value.length ? total.value : null,
     })
-  } catch (e: any) {
-    error.value = `Could not create the Excel file: ${e?.message ?? e}`
+  } catch (e) {
+    error.value = `Could not create the Excel file: ${e instanceof Error ? e.message : String(e)}`
   } finally {
     exporting.value = false
   }
@@ -95,7 +95,9 @@ onMounted(load)
 
 const summary = computed(() => report.value.summary(rows.value))
 const previewRows = computed(() => rows.value.slice(0, 100))
-const pct = computed(() => (progress.value.total ? Math.round((progress.value.loaded / progress.value.total) * 100) : 0))
+const pct = computed(() =>
+  progress.value.total ? Math.round((progress.value.loaded / progress.value.total) * 100) : 0,
+)
 </script>
 
 <template>
@@ -103,7 +105,9 @@ const pct = computed(() => (progress.value.total ? Math.round((progress.value.lo
     <div class="d-flex flex-wrap align-center ga-3 mb-6">
       <div>
         <h1 class="page-title">Reports</h1>
-        <div class="text-body-2 text-medium-emphasis">Choose a report, set the period and filters, check the preview, then export to Excel</div>
+        <div class="text-body-2 text-medium-emphasis">
+          Choose a report, set the period and filters, check the preview, then export to Excel
+        </div>
       </div>
     </div>
 
@@ -164,7 +168,13 @@ const pct = computed(() => (progress.value.total ? Math.round((progress.value.lo
           style="width: 150px"
         />
         <v-spacer />
-        <v-btn variant="tonal" class="text-none" prepend-icon="mdi-eye-outline" :loading="loading && !exporting" @click="load">
+        <v-btn
+          variant="tonal"
+          class="text-none"
+          prepend-icon="mdi-eye-outline"
+          :loading="loading && !exporting"
+          @click="load"
+        >
           Show preview
         </v-btn>
         <v-btn
@@ -179,7 +189,13 @@ const pct = computed(() => (progress.value.total ? Math.round((progress.value.lo
           Export to Excel
         </v-btn>
       </v-card-text>
-      <v-progress-linear v-if="loading" :model-value="pct" :indeterminate="!progress.total" color="primary" height="4" />
+      <v-progress-linear
+        v-if="loading"
+        :model-value="pct"
+        :indeterminate="!progress.total"
+        color="primary"
+        height="4"
+      />
       <div v-if="loading && progress.total > 5000" class="px-4 pb-3 text-caption text-medium-emphasis">
         Loading {{ progress.loaded.toLocaleString() }} of {{ progress.total.toLocaleString() }} rows…
       </div>
@@ -203,8 +219,16 @@ const pct = computed(() => (progress.value.total ? Math.round((progress.value.lo
       </v-col>
     </v-row>
 
-    <v-alert v-if="total > rows.length" type="info" variant="tonal" rounded="lg" class="mb-3" icon="mdi-information-outline">
-      {{ total.toLocaleString() }} rows match. The export includes the first {{ rows.length.toLocaleString() }}. Choose a shorter period to get everything.
+    <v-alert
+      v-if="total > rows.length"
+      type="info"
+      variant="tonal"
+      rounded="lg"
+      class="mb-3"
+      icon="mdi-information-outline"
+    >
+      {{ total.toLocaleString() }} rows match. The export includes the first {{ rows.length.toLocaleString() }}. Choose
+      a shorter period to get everything.
     </v-alert>
 
     <v-card class="bordered">
@@ -222,7 +246,11 @@ const pct = computed(() => (progress.value.total ? Math.round((progress.value.lo
           <thead>
             <tr>
               <th class="num">#</th>
-              <th v-for="c in report.columns" :key="c.key" :class="{ right: ['money', 'number', 'percent'].includes(c.type ?? '') }">
+              <th
+                v-for="c in report.columns"
+                :key="c.key"
+                :class="{ right: ['money', 'number', 'percent'].includes(c.type ?? '') }"
+              >
                 {{ c.header }}
               </th>
             </tr>
@@ -276,7 +304,9 @@ const pct = computed(() => (progress.value.total ? Math.round((progress.value.lo
   background: rgb(var(--v-theme-surface));
   box-shadow: inset 0 0 0 1px rgba(var(--v-theme-on-surface), 0.1);
   cursor: pointer;
-  transition: box-shadow 0.15s, transform 0.15s;
+  transition:
+    box-shadow 0.15s,
+    transform 0.15s;
 }
 .report-card:hover {
   transform: translateY(-1px);

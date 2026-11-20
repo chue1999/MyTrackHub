@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TrackedEvent } from '~/composables/useApi'
+import type { TrackedEvent } from '~/types/api'
 
 interface Transfer {
   id: string
@@ -41,7 +41,10 @@ const range = ref(lastDays(14))
 const days = computed(() => rangeText(range.value))
 const { data, pending, error, refresh } = await useAsyncData(
   'overview',
-  () => api<Overview>('/stats/overview', { query: { from: rangeIso(range.value.from), to: rangeIso(range.value.to, true) } }),
+  () =>
+    api<Overview>('/stats/overview', {
+      query: { from: rangeIso(range.value.from), to: rangeIso(range.value.to, true) },
+    }),
   { watch: [range] },
 )
 
@@ -62,7 +65,12 @@ const todayIso = (() => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 })()
 const failedTodayLink = `/events?result=failed&from=${todayIso}&to=${todayIso}`
-const todayLabel = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+const todayLabel = new Date().toLocaleDateString('en-GB', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+})
 
 // ── daily trend ──
 const metric = ref<'activeUsers' | 'logins' | 'events'>('activeUsers')
@@ -70,7 +78,11 @@ const METRIC_LABEL = { activeUsers: 'active users', logins: 'logins', events: 'a
 const trend = computed(() =>
   (data.value?.daily ?? []).map((d) => ({
     label: d.date.slice(8),
-    title: new Date(`${d.date}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }),
+    title: new Date(`${d.date}T00:00:00`).toLocaleDateString('en-GB', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+    }),
     value: d[metric.value],
   })),
 )
@@ -115,10 +127,30 @@ const resultSlices = computed(() => {
   const r = data.value?.apiResults
   if (!r) return []
   return [
-    { key: 'success', label: 'Success', value: r.success, color: 'var(--status-good)', icon: 'mdi-check-circle-outline' },
-    { key: 'failed', label: 'Failed', value: r.failed, color: 'var(--status-critical)', icon: 'mdi-close-circle-outline' },
+    {
+      key: 'success',
+      label: 'Success',
+      value: r.success,
+      color: 'var(--status-good)',
+      icon: 'mdi-check-circle-outline',
+    },
+    {
+      key: 'failed',
+      label: 'Failed',
+      value: r.failed,
+      color: 'var(--status-critical)',
+      icon: 'mdi-close-circle-outline',
+    },
     ...(r.unknown
-      ? [{ key: 'unknown', label: 'Not checked (old app)', value: r.unknown, color: 'var(--status-unknown)', icon: 'mdi-help-circle-outline' }]
+      ? [
+          {
+            key: 'unknown',
+            label: 'Not checked (old app)',
+            value: r.unknown,
+            color: 'var(--status-unknown)',
+            icon: 'mdi-help-circle-outline',
+          },
+        ]
       : []),
   ]
 })
@@ -147,8 +179,7 @@ const screenRows = computed(() => single(data.value?.topScreens ?? [], screenLab
 const tapRows = computed(() => single(data.value?.topTaps ?? [], (n) => n))
 
 // ── transfers ──
-const receiver = (t: Transfer) =>
-  t.receiver ? formatPhone(t.receiver.replace(/^\+?856/, '').replace(/^0/, '')) : '—'
+const receiver = (t: Transfer) => (t.receiver ? formatPhone(t.receiver.replace(/^\+?856/, '').replace(/^0/, '')) : '—')
 const transferHeaders = [
   { title: 'Time', key: 'occurredAt', sortable: false, width: 130 },
   { title: 'From', key: 'from', sortable: false },
@@ -178,6 +209,10 @@ live.onEvents(({ events }) => {
   }
   refreshSoon()
 })
+
+function openTransfer(_: unknown, { item }: { item: Transfer }) {
+  navigateTo(`/events/${item.id}`)
+}
 </script>
 
 <template>
@@ -193,8 +228,16 @@ live.onEvents(({ events }) => {
           <div v-if="data" class="hero-chips">
             <span><v-icon icon="mdi-account-clock" size="16" /> {{ data.totals.activeToday }} active today</span>
             <span><v-icon icon="mdi-login" size="16" /> {{ data.totals.loginsToday }} logins</span>
-            <span><v-icon icon="mdi-bank-transfer" size="16" /> {{ formatMoney(data.transfersToday.amount) }} transferred</span>
-            <NuxtLink v-if="data.totals.failedToday" :to="failedTodayLink" class="bad" title="Show only today's failed actions">
+            <span
+              ><v-icon icon="mdi-bank-transfer" size="16" />
+              {{ formatMoney(data.transfersToday.amount) }} transferred</span
+            >
+            <NuxtLink
+              v-if="data.totals.failedToday"
+              :to="failedTodayLink"
+              class="bad"
+              title="Show only today's failed actions"
+            >
               <v-icon icon="mdi-alert-circle" size="16" /> {{ data.totals.failedToday }} failed today
               <v-icon icon="mdi-arrow-right" size="14" />
             </NuxtLink>
@@ -202,27 +245,64 @@ live.onEvents(({ events }) => {
         </div>
         <div class="hero-actions">
           <DateRange v-model="range" />
-          <v-btn icon="mdi-refresh" variant="flat" color="white" rounded="lg" :loading="pending" title="Refresh" @click="refresh()" />
+          <v-btn
+            icon="mdi-refresh"
+            variant="flat"
+            color="white"
+            rounded="lg"
+            :loading="pending"
+            title="Refresh"
+            @click="refresh()"
+          />
         </div>
       </div>
     </section>
 
-    <v-alert v-if="error" type="error" variant="tonal" class="mb-4" :text="error.data?.message || 'Could not load the dashboard'" />
+    <v-alert
+      v-if="error"
+      type="error"
+      variant="tonal"
+      class="mb-4"
+      :text="errorMessage(error, 'Could not load the dashboard')"
+    />
 
     <template v-if="data">
       <!-- headline numbers -->
       <v-row>
         <v-col cols="12" sm="6" md="4" lg>
-          <StatCard title="All users" :value="data.totals.totalUsers" icon="mdi-account-group" :hint="`+${data.totals.newUsersToday} new today`" />
+          <StatCard
+            title="All users"
+            :value="data.totals.totalUsers"
+            icon="mdi-account-group"
+            :hint="`+${data.totals.newUsersToday} new today`"
+          />
         </v-col>
         <v-col cols="12" sm="6" md="4" lg>
-          <StatCard title="Active today" :value="data.totals.activeToday" icon="mdi-account-clock" color="success" :delta="deltaOf('activeUsers')" />
+          <StatCard
+            title="Active today"
+            :value="data.totals.activeToday"
+            icon="mdi-account-clock"
+            color="success"
+            :delta="deltaOf('activeUsers')"
+          />
         </v-col>
         <v-col cols="12" sm="6" md="4" lg>
-          <StatCard title="Logins today" :value="data.totals.loginsToday" icon="mdi-login" color="info" :delta="deltaOf('logins')" />
+          <StatCard
+            title="Logins today"
+            :value="data.totals.loginsToday"
+            icon="mdi-login"
+            color="info"
+            :delta="deltaOf('logins')"
+          />
         </v-col>
         <v-col cols="12" sm="6" md="6" lg>
-          <StatCard title="Actions today" :value="data.totals.eventsToday" icon="mdi-gesture-tap" color="warning" :delta="deltaOf('events')" />
+          <StatCard
+            title="Actions today"
+            :value="data.totals.eventsToday"
+            icon="mdi-gesture-tap"
+            color="warning"
+            :delta="deltaOf('events')"
+          />
         </v-col>
         <v-col cols="12" md="6" lg>
           <StatCard
@@ -246,10 +326,10 @@ live.onEvents(({ events }) => {
         <div class="font-weight-bold">The app is still running an old version of the tracker</div>
         <div class="text-body-2">
           {{ data.outdatedRecent }} API calls in the last 15 minutes arrived without details (receiver, amount, result).
-          Fully restart the app: stop it and run it again, or press Hot Restart (Shift+Cmd+F5). Hot Reload is not enough.
+          Fully restart the app: stop it and run it again, or press Hot Restart (Shift+Cmd+F5). Hot Reload is not
+          enough.
         </div>
       </v-alert>
-
 
       <!-- needs attention: today's failures -->
       <v-card v-if="data.recentFailures.length" class="bordered attention mt-4">
@@ -258,10 +338,18 @@ live.onEvents(({ events }) => {
           <div class="flex-grow-1">
             <div class="attention-title">Needs attention</div>
             <div class="attention-sub">
-              {{ data.totals.failedToday }} action{{ data.totals.failedToday > 1 ? 's' : '' }} failed today. The latest are below. Click one to see what happened.
+              {{ data.totals.failedToday }} action{{ data.totals.failedToday > 1 ? 's' : '' }} failed today. The latest
+              are below. Click one to see what happened.
             </div>
           </div>
-          <v-btn :to="failedTodayLink" variant="flat" color="error" rounded="lg" class="text-none" append-icon="mdi-arrow-right">
+          <v-btn
+            :to="failedTodayLink"
+            variant="flat"
+            color="error"
+            rounded="lg"
+            class="text-none"
+            append-icon="mdi-arrow-right"
+          >
             All {{ data.totals.failedToday }} failures
           </v-btn>
         </div>
@@ -276,7 +364,9 @@ live.onEvents(({ events }) => {
               <div class="fail-msg text-truncate">{{ f.result || 'Failed' }}</div>
             </div>
             <div class="text-right flex-shrink-0">
-              <div class="text-body-2 font-weight-medium text-truncate" style="max-width: 160px">{{ f.user ? fullName(f.user) : 'Guest' }}</div>
+              <div class="text-body-2 font-weight-medium text-truncate" style="max-width: 160px">
+                {{ f.user ? fullName(f.user) : 'Guest' }}
+              </div>
               <div class="text-caption text-medium-emphasis text-mono">{{ formatTime(f.occurredAt) }}</div>
             </div>
             <v-icon icon="mdi-chevron-right" class="text-medium-emphasis" />
@@ -341,11 +431,18 @@ live.onEvents(({ events }) => {
           <v-card class="bordered h-100">
             <v-card-item prepend-icon="mdi-broadcast">
               <v-card-title class="font-weight-bold">Live activity</v-card-title>
-              <v-card-subtitle>{{ live.connected.value ? 'Appears the moment it happens' : 'Reconnecting…' }}</v-card-subtitle>
+              <v-card-subtitle>{{
+                live.connected.value ? 'Appears the moment it happens' : 'Reconnecting…'
+              }}</v-card-subtitle>
             </v-card-item>
             <v-card-text>
               <transition-group name="feed" tag="div">
-                <NuxtLink v-for="e in feed" :key="e.id" :to="`/events/${e.id}`" class="d-flex align-center ga-3 py-2 feed-row">
+                <NuxtLink
+                  v-for="e in feed"
+                  :key="e.id"
+                  :to="`/events/${e.id}`"
+                  class="d-flex align-center ga-3 py-2 feed-row"
+                >
                   <v-avatar
                     :color="e.type === 'api' ? (e.success === false ? 'error' : 'success') : EVENT_META[e.type]?.color"
                     size="30"
@@ -378,7 +475,13 @@ live.onEvents(({ events }) => {
           <v-card-title class="font-weight-bold">Recent transfers</v-card-title>
           <v-card-subtitle>Who sent money to which number, how much, and whether it worked</v-card-subtitle>
           <template #append>
-            <v-btn to="/events?search=TransferBalance" variant="text" size="small" class="text-none" append-icon="mdi-arrow-right">
+            <v-btn
+              to="/events?search=TransferBalance"
+              variant="text"
+              size="small"
+              class="text-none"
+              append-icon="mdi-arrow-right"
+            >
               All transfers
             </v-btn>
           </template>
@@ -391,7 +494,7 @@ live.onEvents(({ events }) => {
           density="comfortable"
           class="transfer-table"
           hover
-          @click:row="(_: unknown, { item }: { item: Transfer }) => navigateTo(`/events/${item.id}`)"
+          @click:row="openTransfer"
         >
           <template #item.occurredAt="{ item }">
             <div class="font-weight-bold text-mono">{{ formatTime(item.occurredAt) }}</div>
@@ -400,7 +503,12 @@ live.onEvents(({ events }) => {
             </div>
           </template>
           <template #item.from="{ item }">
-            <NuxtLink v-if="item.userId" :to="`/users/${item.userId}`" class="text-decoration-none" style="color: inherit">
+            <NuxtLink
+              v-if="item.userId"
+              :to="`/users/${item.userId}`"
+              class="text-decoration-none"
+              style="color: inherit"
+            >
               <div class="font-weight-medium">{{ fullName(item) }}</div>
               <div class="text-caption text-medium-emphasis text-mono phone">{{ formatPhone(item.msisdn) }}</div>
             </NuxtLink>
@@ -578,7 +686,10 @@ live.onEvents(({ events }) => {
   color: #1a1a1a;
   background: rgba(255, 255, 255, 0.75);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
-  transition: background 0.15s, color 0.15s, transform 0.1s;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    transform 0.1s;
   cursor: pointer;
 }
 .range-btn:hover {

@@ -23,7 +23,13 @@ const ROLE_OPTIONS = [
 // ── create / edit dialog ──
 const dialog = ref(false)
 const editing = ref<Account | null>(null)
-const form = reactive({ username: '', displayName: '', role: 'viewer' as 'admin' | 'viewer', isActive: true, password: '' })
+const form = reactive({
+  username: '',
+  displayName: '',
+  role: 'viewer' as 'admin' | 'viewer',
+  isActive: true,
+  password: '',
+})
 const showPw = ref(false)
 const saving = ref(false)
 const formError = ref('')
@@ -36,7 +42,13 @@ function openCreate() {
 }
 function openEdit(a: Account) {
   editing.value = a
-  Object.assign(form, { username: a.username, displayName: a.displayName ?? '', role: a.role, isActive: a.isActive, password: '' })
+  Object.assign(form, {
+    username: a.username,
+    displayName: a.displayName ?? '',
+    role: a.role,
+    isActive: a.isActive,
+    password: '',
+  })
   formError.value = ''
   dialog.value = true
 }
@@ -72,8 +84,8 @@ async function save() {
     dialog.value = false
     toast(editing.value ? 'Account updated' : `Account "${form.username}" created`)
     await refresh()
-  } catch (e: any) {
-    formError.value = e?.data?.message || 'Could not save'
+  } catch (e) {
+    formError.value = errorMessage(e, 'Could not save')
   } finally {
     saving.value = false
   }
@@ -90,8 +102,8 @@ async function confirmDelete() {
     toast(`Account "${toDelete.value.username}" deleted`)
     toDelete.value = null
     await refresh()
-  } catch (e: any) {
-    toast(e?.data?.message || 'Could not delete', 'error')
+  } catch (e) {
+    toast(errorMessage(e, 'Could not delete'), 'error')
   } finally {
     deleting.value = false
   }
@@ -117,7 +129,13 @@ function toast(text: string, color = 'success') {
       </v-btn>
     </div>
 
-    <v-alert v-if="error" type="error" variant="tonal" class="mb-4" :text="error.data?.message || 'Could not load accounts'" />
+    <v-alert
+      v-if="error"
+      type="error"
+      variant="tonal"
+      class="mb-4"
+      :text="errorMessage(error, 'Could not load accounts')"
+    />
 
     <v-card class="bordered">
       <v-table hover>
@@ -148,8 +166,12 @@ function toast(text: string, color = 'success') {
               </div>
             </td>
             <td>
-              <v-chip size="small" :color="a.role === 'admin' ? 'primary' : undefined" variant="tonal"
-                :prepend-icon="a.role === 'admin' ? 'mdi-shield-crown-outline' : 'mdi-eye-outline'">
+              <v-chip
+                size="small"
+                :color="a.role === 'admin' ? 'primary' : undefined"
+                variant="tonal"
+                :prepend-icon="a.role === 'admin' ? 'mdi-shield-crown-outline' : 'mdi-eye-outline'"
+              >
                 {{ a.role === 'admin' ? 'Administrator' : 'Viewer' }}
               </v-chip>
             </td>
@@ -185,12 +207,20 @@ function toast(text: string, color = 'success') {
       <v-card rounded="xl">
         <v-card-item :prepend-icon="editing ? 'mdi-account-edit-outline' : 'mdi-account-plus-outline'">
           <v-card-title class="font-weight-bold">{{ editing ? 'Edit account' : 'New account' }}</v-card-title>
-          <v-card-subtitle>{{ editing ? editing.username : 'They log in with this username and password' }}</v-card-subtitle>
+          <v-card-subtitle>{{
+            editing ? editing.username : 'They log in with this username and password'
+          }}</v-card-subtitle>
         </v-card-item>
         <v-card-text>
           <v-form @submit.prevent="save">
             <v-text-field v-model="form.displayName" label="Full name" prepend-inner-icon="mdi-badge-account-outline" />
-            <v-text-field v-model="form.username" label="Username" prepend-inner-icon="mdi-account-outline" :rules="[rules.username]" autocomplete="off" />
+            <v-text-field
+              v-model="form.username"
+              label="Username"
+              prepend-inner-icon="mdi-account-outline"
+              :rules="[rules.username]"
+              autocomplete="off"
+            />
             <v-text-field
               v-model="form.password"
               :label="editing ? 'New password (leave empty to keep)' : 'Password'"
@@ -200,11 +230,20 @@ function toast(text: string, color = 'success') {
               autocomplete="new-password"
             >
               <template #append-inner>
-                <v-icon :icon="showPw ? 'mdi-eye-off-outline' : 'mdi-eye-outline'" class="mr-1" @click="showPw = !showPw" />
+                <v-icon
+                  :icon="showPw ? 'mdi-eye-off-outline' : 'mdi-eye-outline'"
+                  class="mr-1"
+                  @click="showPw = !showPw"
+                />
                 <v-btn size="x-small" variant="tonal" class="text-none" @click="generatePassword">Generate</v-btn>
               </template>
             </v-text-field>
-            <v-select v-model="form.role" :items="ROLE_OPTIONS" label="Role" prepend-inner-icon="mdi-shield-account-outline" />
+            <v-select
+              v-model="form.role"
+              :items="ROLE_OPTIONS"
+              label="Role"
+              prepend-inner-icon="mdi-shield-account-outline"
+            />
             <v-switch
               v-model="form.isActive"
               color="success"
@@ -235,17 +274,21 @@ function toast(text: string, color = 'success') {
           <v-card-title class="font-weight-bold">Delete account?</v-card-title>
         </v-card-item>
         <v-card-text>
-          <strong>{{ toDelete?.displayName || toDelete?.username }}</strong> will no longer be able to log in. This can't be undone.
-          To block someone temporarily, edit the account and switch it to Disabled instead.
+          <strong>{{ toDelete?.displayName || toDelete?.username }}</strong> will no longer be able to log in. This
+          can't be undone. To block someone temporarily, edit the account and switch it to Disabled instead.
         </v-card-text>
         <v-card-actions class="pa-4 pt-0">
           <v-spacer />
           <v-btn variant="text" class="text-none" @click="toDelete = null">Cancel</v-btn>
-          <v-btn color="error" variant="flat" class="text-none" :loading="deleting" @click="confirmDelete">Delete</v-btn>
+          <v-btn color="error" variant="flat" class="text-none" :loading="deleting" @click="confirmDelete"
+            >Delete</v-btn
+          >
         </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <v-snackbar v-model="snack.show" :color="snack.color" timeout="3000" location="bottom right">{{ snack.text }}</v-snackbar>
+    <v-snackbar v-model="snack.show" :color="snack.color" timeout="3000" location="bottom right">{{
+      snack.text
+    }}</v-snackbar>
   </div>
 </template>

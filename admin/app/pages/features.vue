@@ -13,7 +13,10 @@ const range = ref(lastDays(30))
 const periodText = computed(() => rangeText(range.value))
 const { data, pending, error, refresh } = await useAsyncData(
   'feature-usage',
-  () => api<{ days: number; apis: ApiUsage[] }>('/stats/features', { query: { from: rangeIso(range.value.from), to: rangeIso(range.value.to, true) } }),
+  () =>
+    api<{ days: number; apis: ApiUsage[] }>('/stats/features', {
+      query: { from: rangeIso(range.value.from), to: rangeIso(range.value.to, true) },
+    }),
   { watch: [range] },
 )
 const refreshSoon = debounce(() => refresh(), 2000)
@@ -38,7 +41,8 @@ interface FeatureRow {
 const rows = computed<FeatureRow[]>(() => {
   const map = new Map<string, FeatureRow>()
   const ensure = (key: string, label: string, icon: string, apis: string[]) => {
-    if (!map.has(key)) map.set(key, { key, label, icon, uses: 0, succeeded: 0, failed: 0, users: 0, lastAt: null, actions: [], apis })
+    if (!map.has(key))
+      map.set(key, { key, label, icon, uses: 0, succeeded: 0, failed: 0, users: 0, lastAt: null, actions: [], apis })
     return map.get(key)!
   }
   for (const f of FEATURES) ensure(f.key, f.label, f.icon, Object.keys(f.apis))
@@ -92,15 +96,31 @@ const open = (r: FeatureRow, failedOnly = false) =>
       <v-btn icon="mdi-refresh" variant="text" :loading="pending" @click="refresh()" />
     </div>
 
-    <v-alert v-if="error" type="error" variant="tonal" class="mb-4" :text="error.data?.message || 'Could not load features'" />
+    <v-alert
+      v-if="error"
+      type="error"
+      variant="tonal"
+      class="mb-4"
+      :text="errorMessage(error, 'Could not load features')"
+    />
 
     <template v-if="data">
       <v-row class="mb-2">
         <v-col cols="12" sm="4">
-          <StatCard title="Features used" :value="`${used.filter((r) => r.key !== 'other').length} / ${FEATURES.length}`" icon="mdi-apps" />
+          <StatCard
+            title="Features used"
+            :value="`${used.filter((r) => r.key !== 'other').length} / ${FEATURES.length}`"
+            icon="mdi-apps"
+          />
         </v-col>
         <v-col cols="12" sm="4">
-          <StatCard title="Actions" :value="totals.uses" icon="mdi-lightning-bolt" color="info" :hint="`${periodText}`" />
+          <StatCard
+            title="Actions"
+            :value="totals.uses"
+            icon="mdi-lightning-bolt"
+            color="info"
+            :hint="`${periodText}`"
+          />
         </v-col>
         <v-col cols="12" sm="4">
           <StatCard title="Failed" :value="totals.failed" icon="mdi-close-circle-outline" color="error" />
@@ -145,7 +165,9 @@ const open = (r: FeatureRow, failedOnly = false) =>
                 <strong>{{ a.uses.toLocaleString() }}</strong>
               </span>
             </div>
-            <div v-if="r.actions.length > 4" class="text-caption text-medium-emphasis mt-1">+ {{ r.actions.length - 4 }} more</div>
+            <div v-if="r.actions.length > 4" class="text-caption text-medium-emphasis mt-1">
+              + {{ r.actions.length - 4 }} more
+            </div>
           </div>
         </v-card>
       </div>

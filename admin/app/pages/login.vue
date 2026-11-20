@@ -17,8 +17,8 @@ async function submit() {
   try {
     await login(username.value.trim(), password.value)
     await navigateTo('/')
-  } catch (e: any) {
-    error.value = e?.data?.message || 'Cannot reach the server. Is the API running?'
+  } catch (e) {
+    error.value = errorMessage(e, 'Cannot reach the server. Is the API running?')
   } finally {
     loading.value = false
   }
@@ -51,15 +51,15 @@ const sample = [
           </div>
           <div>
             <div class="text-h6 font-weight-black">{{ branding.name }}</div>
-            <div v-if="branding.subtitle" class="text-caption font-weight-medium" style="opacity: 0.75">{{ branding.subtitle }}</div>
+            <div v-if="branding.subtitle" class="text-caption font-weight-medium" style="opacity: 0.75">
+              {{ branding.subtitle }}
+            </div>
           </div>
         </div>
 
         <div class="brand-copy">
           <h1 class="brand-title">See what your users do, the moment they do it.</h1>
-          <p class="brand-sub">
-            Logins, screens and taps from the MyTPlus app, streamed live to one dashboard.
-          </p>
+          <p class="brand-sub">Logins, screens and taps from the MyTPlus app, streamed live to one dashboard.</p>
 
           <div class="feed-card">
             <div class="d-flex align-center mb-3">
@@ -281,8 +281,14 @@ const sample = [
   flex-shrink: 0;
 }
 @keyframes feed-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: none; }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 .pulse {
   width: 9px;
@@ -293,8 +299,12 @@ const sample = [
   animation: pulse 1.8s infinite;
 }
 @keyframes pulse {
-  70% { box-shadow: 0 0 0 9px rgba(46, 158, 91, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(46, 158, 91, 0); }
+  70% {
+    box-shadow: 0 0 0 9px rgba(46, 158, 91, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(46, 158, 91, 0);
+  }
 }
 .brand-stats {
   position: relative;

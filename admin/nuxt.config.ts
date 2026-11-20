@@ -24,6 +24,10 @@ export default defineNuxtConfig({
 
   css: ['@mdi/font/css/materialdesignicons.css', '~/assets/main.css'],
 
+  // Components live in folders (charts/, data/, common/, layout/) but keep
+  // their plain names: <Pie3D>, <DataView>…
+  components: [{ path: '~/components', pathPrefix: false }],
+
   build: { transpile: ['vuetify'] },
 
   runtimeConfig: {
@@ -34,13 +38,18 @@ export default defineNuxtConfig({
   },
 
   modules: [
+    '@nuxt/eslint',
     (_options, nuxt) => {
       nuxt.hooks.hook('vite:extendConfig', (config) => {
-        config.plugins ||= []
-        config.plugins.push(vuetify({ autoImport: true }))
+        // Vuetify components and directives are imported on demand.
+        config.plugins?.push(vuetify({ autoImport: true }))
       })
     },
   ],
+
+  eslint: { config: { stylistic: false } },
+
+  typescript: { strict: true },
 
   vite: {
     vue: { template: { transformAssetUrls } },

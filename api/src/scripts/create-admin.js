@@ -1,8 +1,8 @@
-// Create or reset an admin account:
+// Create an admin account, or reset its password (also re-enables it as administrator):
 //   npm run seed:admin -- <username> <password> [display name]
-import bcrypt from 'bcryptjs';
-import { ensureDatabase, sequelize } from '../db.js';
+import { connectDatabase, sequelize } from '../db/index.js';
 import { Admin } from '../models/index.js';
+import { hashPassword } from '../services/auth.service.js';
 
 const [username, password, ...nameParts] = process.argv.slice(2);
 if (!username || !password) {
@@ -14,14 +14,12 @@ if (password.length < 8) {
   process.exit(1);
 }
 
-await ensureDatabase();
-await sequelize.sync();
-const passwordHash = await bcrypt.hash(password, 10);
+await connectDatabase();
+const passwordHash = await hashPassword(password);
 const [admin, created] = await Admin.findOrCreate({
   where: { username },
   defaults: { username, passwordHash, displayName: nameParts.join(' ') || username },
 });
-// Resetting also re-enables the account as a full administrator (recovery).
 if (!created) await admin.update({ passwordHash, isActive: true, role: 'admin' });
 console.log(`${created ? 'Created' : 'Updated password for'} admin "${username}"`);
 await sequelize.close();

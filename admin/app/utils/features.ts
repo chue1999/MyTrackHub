@@ -281,7 +281,11 @@ export const FEATURES: Feature[] = [
   },
 ]
 
-export const OTHER_FEATURE: Omit<Feature, 'apis'> = { key: 'other', label: 'Other', icon: 'mdi-dots-horizontal-circle-outline' }
+export const OTHER_FEATURE: Omit<Feature, 'apis'> = {
+  key: 'other',
+  label: 'Other',
+  icon: 'mdi-dots-horizontal-circle-outline',
+}
 
 // endpoint key → { feature, label }
 const INDEX = new Map<string, { feature: Feature; label: string }>()

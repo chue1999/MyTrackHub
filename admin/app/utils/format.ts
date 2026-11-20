@@ -1,3 +1,4 @@
+import type { JsonRecord } from '~/types/api'
 export const EVENT_META: Record<string, { label: string; icon: string; color: string }> = {
   login: { label: 'Login', icon: 'mdi-login', color: 'success' },
   logout: { label: 'Logout', icon: 'mdi-logout', color: 'grey' },
@@ -48,7 +49,12 @@ export function formatTime(value: string) {
 }
 
 export function formatDay(value: string) {
-  return new Date(value).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })
+  return new Date(value).toLocaleDateString('en-GB', {
+    weekday: 'short',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })
 }
 
 export function timeAgo(value?: string | null) {
@@ -136,7 +142,11 @@ export function apiLabel(name: string) {
   const known = lookupApi(name)
   if (known) return known.label
   const path = name.split(' ')[1] ?? name
-  const last = path.split('/').filter((s) => s && !s.startsWith(':')).pop() ?? path
+  const last =
+    path
+      .split('/')
+      .filter((s) => s && !s.startsWith(':'))
+      .pop() ?? path
   return API_LABELS[last] ?? last
 }
 
@@ -154,7 +164,7 @@ export interface SummaryRow {
 
 type Ev = {
   name: string
-  properties: Record<string, any>
+  properties: JsonRecord
   msisdn?: string | null
   user?: { msisdn?: string | null } | null
 }
@@ -162,9 +172,14 @@ type Ev = {
 /** Pulls the important business facts out of an API call (who, to whom, how much…). */
 export function apiSummary(e: Ev): SummaryRow[] {
   const endpoint = (e.name.split(' ')[1] ?? '').split('/').pop() ?? ''
-  const body = (e.properties?.request?.body ?? {}) as Record<string, any>
+  const body = (e.properties?.request?.body ?? {}) as JsonRecord
   const me = formatPhone(e.user?.msisdn ?? e.msisdn ?? null)
-  const phone = (v: unknown) => formatPhone(String(v ?? '').replace(/^\+?856/, '').replace(/^0/, ''))
+  const phone = (v: unknown) =>
+    formatPhone(
+      String(v ?? '')
+        .replace(/^\+?856/, '')
+        .replace(/^0/, ''),
+    )
   const rows: SummaryRow[] = []
   const add = (label: string, value: unknown, icon: string, strong = false) => {
     if (value !== undefined && value !== null && value !== '') rows.push({ label, value: String(value), icon, strong })
@@ -207,12 +222,21 @@ export function apiSummary(e: Ev): SummaryRow[] {
       add('Rental id', body.rentalId, 'mdi-identifier', true)
       break
   }
-  const purchase = e.properties?.purchase as Record<string, any> | undefined
+  const purchase = e.properties?.purchase as JsonRecord | undefined
   if (purchase && endpoint.startsWith('RegisterPackage')) {
     rows.length = 0
-    add('Package', [purchase.name || purchase.code, purchase.net, purchase.duration].filter(Boolean).join(' · '), 'mdi-package-variant', true)
+    add(
+      'Package',
+      [purchase.name || purchase.code, purchase.net, purchase.duration].filter(Boolean).join(' · '),
+      'mdi-package-variant',
+      true,
+    )
     add('Price', purchase.price != null ? formatMoney(purchase.price) : null, 'mdi-cash', true)
-    add('Paid with', CHANNEL_META[purchase.channel]?.label ?? purchase.channel, CHANNEL_META[purchase.channel]?.icon ?? 'mdi-wallet-outline')
+    add(
+      'Paid with',
+      CHANNEL_META[purchase.channel]?.label ?? purchase.channel,
+      CHANNEL_META[purchase.channel]?.icon ?? 'mdi-wallet-outline',
+    )
     add('For number', purchase.forNumber ? phone(purchase.forNumber) : me, 'mdi-cellphone')
   }
   if (body.GiftCode) {
@@ -228,7 +252,10 @@ export function apiSummaryLine(e: Ev) {
   const r = apiSummary(e)
   const get = (l: string) => r.find((x) => x.label === l)?.value
   if (get('To')) return [get('From'), '→', get('To'), get('Amount') && `· ${get('Amount')}`].filter(Boolean).join(' ')
-  return r.filter((x) => x.strong).map((x) => `${x.label}: ${x.value}`).join(' · ')
+  return r
+    .filter((x) => x.strong)
+    .map((x) => `${x.label}: ${x.value}`)
+    .join(' · ')
 }
 
 const ACTION_LABELS: Record<string, string> = {
@@ -262,7 +289,12 @@ export function screenLabel(name: string) {
 }
 
 export function formatDateLong(value: string) {
-  return new Date(value).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  return new Date(value).toLocaleDateString('en-GB', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
 }
 
 /** Each event type always gets the same colour (colour follows the entity, never its rank). */
@@ -316,7 +348,8 @@ export function rangeIso(v: string | undefined | null, end = false) {
 /** Range for "last N days" in the picker's format. */
 export function lastDays(n: number) {
   const pad = (x: number) => String(x).padStart(2, '0')
-  const f = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  const f = (d: Date) =>
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
   const start = new Date()
   start.setDate(start.getDate() - (n - 1))
   start.setHours(0, 0, 0, 0)
@@ -327,7 +360,8 @@ export function lastDays(n: number) {
 
 /** Short text for a chosen range, e.g. "20 Nov 08:00 – 21 Nov 17:30". */
 export function rangeText(r: { from: string; to: string }) {
-  const f = (v: string) => new Date(v).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+  const f = (v: string) =>
+    new Date(v).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
   if (!r.from && !r.to) return 'all time'
   if (r.from && r.to) return `${f(r.from)} – ${f(r.to)}`
   return r.from ? `from ${f(r.from)}` : `until ${f(r.to)}`

@@ -1,9 +1,4 @@
-interface AdminInfo {
-  id: number
-  username: string
-  displayName?: string | null
-  role?: 'admin' | 'viewer'
-}
+import type { AdminInfo } from '~/types/api'
 
 /** Admin login state, kept in cookies so it survives a page reload. */
 export function useAuth() {
@@ -12,7 +7,7 @@ export function useAuth() {
   const config = useRuntimeConfig()
 
   async function login(username: string, password: string) {
-    const res = await $fetch<{ token: string; admin: AdminInfo }>('/api/admin/auth/login', {
+    const res = await $fetch<{ token: string; admin: AdminInfo }>('/api/v1/admin/auth/login', {
       baseURL: config.public.apiBase,
       method: 'POST',
       body: { username, password },

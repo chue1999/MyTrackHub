@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Paged, TrackedEvent } from '~/composables/useApi'
+import type { Paged, TrackedEvent } from '~/types/api'
 
 const api = useApi()
 
@@ -57,7 +57,9 @@ watch(
     type.value = (route.query.type as string) || null
   },
 )
-const hasFilters = computed(() => !!(search.value || type.value || result.value || from.value || to.value || feature.value))
+const hasFilters = computed(
+  () => !!(search.value || type.value || result.value || from.value || to.value || feature.value),
+)
 function clearFilters() {
   feature.value = null
   search.value = ''
@@ -96,7 +98,6 @@ const { data, pending, error, refresh } = await useAsyncData(
   { watch: [debounced, type, result, feature, from, to, page, pageSize] },
 )
 watch([type, result, feature, from, to], () => (page.value = 1))
-
 
 const missed = ref(0)
 watch([debounced, type, result, from, to, page], () => (missed.value = 0))
@@ -174,10 +175,7 @@ function showMissed() {
           </v-col>
         </v-row>
         <div class="d-flex align-center flex-wrap ga-3 mt-3">
-          <div
-            v-if="result === 'false'"
-            class="filter-banner bad"
-          >
+          <div v-if="result === 'false'" class="filter-banner bad">
             <v-icon icon="mdi-close-circle" size="18" />
             Showing {{ filterText }} · {{ (data?.total ?? 0).toLocaleString() }} found
           </div>
@@ -185,28 +183,36 @@ function showMissed() {
             <v-icon icon="mdi-filter-variant" size="18" />
             Showing {{ filterText }} · {{ (data?.total ?? 0).toLocaleString() }} found
           </div>
-          <span v-else class="text-caption text-medium-emphasis">{{ (data?.total ?? 0).toLocaleString() }} results</span>
-          <v-btn v-if="hasFilters" size="small" variant="text" class="text-none" prepend-icon="mdi-filter-remove-outline" @click="clearFilters">
+          <span v-else class="text-caption text-medium-emphasis"
+            >{{ (data?.total ?? 0).toLocaleString() }} results</span
+          >
+          <v-btn
+            v-if="hasFilters"
+            size="small"
+            variant="text"
+            class="text-none"
+            prepend-icon="mdi-filter-remove-outline"
+            @click="clearFilters"
+          >
             Show all
           </v-btn>
         </div>
       </v-card-text>
       <v-divider />
       <v-card-text v-if="missed || error" class="pb-0">
-        <v-alert
-          v-if="missed"
-          type="info"
-          variant="tonal"
-          density="compact"
-          class="mb-4"
-          icon="mdi-bell-ring-outline"
-        >
+        <v-alert v-if="missed" type="info" variant="tonal" density="compact" class="mb-4" icon="mdi-bell-ring-outline">
           {{ missed }} new action{{ missed > 1 ? 's' : '' }} since you opened this view
           <template #append>
             <v-btn size="small" variant="text" @click="showMissed">Show</v-btn>
           </template>
         </v-alert>
-        <v-alert v-if="error" type="error" variant="tonal" class="mb-4" :text="error.data?.message || 'Could not load activity'" />
+        <v-alert
+          v-if="error"
+          type="error"
+          variant="tonal"
+          class="mb-4"
+          :text="errorMessage(error, 'Could not load activity')"
+        />
       </v-card-text>
       <EventTable
         v-model:page="page"

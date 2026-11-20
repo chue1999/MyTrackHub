@@ -1,6 +1,6 @@
 <script setup lang="ts">
-const { branding } = useBranding()
 import { useDisplay, useTheme } from 'vuetify'
+const { branding } = useBranding()
 
 const { admin, logout } = useAuth()
 const live = useLive()
@@ -24,9 +24,13 @@ onMounted(async () => {
   live.connect()
   // Refresh name/role (e.g. after an administrator changed this account).
   try {
-    const me = await api<{ id: number; username: string; displayName: string | null; role: 'admin' | 'viewer' }>('/auth/me')
+    const me = await api<{ id: number; username: string; displayName: string | null; role: 'admin' | 'viewer' }>(
+      '/auth/me',
+    )
     admin.value = { id: me.id, username: me.username, displayName: me.displayName, role: me.role }
-  } catch {}
+  } catch {
+    // Offline or API down: keep the account info stored at login.
+  }
 })
 
 const nav = computed(() => [
@@ -40,95 +44,115 @@ const nav = computed(() => [
 const adminNav = computed(() => [
   { title: 'Settings', icon: 'mdi-cog-outline', activeIcon: 'mdi-cog', to: '/settings' },
   ...(admin.value?.role === 'admin'
-    ? [{ title: 'Admin accounts', icon: 'mdi-shield-account-outline', activeIcon: 'mdi-shield-account', to: '/accounts' }]
+    ? [
+        {
+          title: 'Admin accounts',
+          icon: 'mdi-shield-account-outline',
+          activeIcon: 'mdi-shield-account',
+          to: '/accounts',
+        },
+      ]
     : []),
 ])
 const isActive = (to: string) => (to === '/' ? route.path === '/' : route.path.startsWith(to))
 
 const displayName = computed(() => admin.value?.displayName || admin.value?.username || '')
-
 </script>
 
 <template>
-  <v-navigation-drawer v-model="drawer" :permanent="mdAndUp" width="260" class="sidebar" theme="dark">
-    <div class="brand">
-      <div class="brand-logo" :class="{ custom: branding.logo }">
-        <BrandMark size="24" />
+  <v-layout class="app-shell">
+    <v-navigation-drawer v-model="drawer" :permanent="mdAndUp" width="260" class="sidebar" theme="dark">
+      <div class="brand">
+        <div class="brand-logo" :class="{ custom: branding.logo }">
+          <BrandMark size="24" />
+        </div>
+        <div style="min-width: 0">
+          <div class="brand-name">{{ branding.name }}</div>
+          <div v-if="branding.subtitle" class="brand-sub">{{ branding.subtitle }}</div>
+        </div>
       </div>
-      <div style="min-width: 0">
-        <div class="brand-name">{{ branding.name }}</div>
-        <div v-if="branding.subtitle" class="brand-sub">{{ branding.subtitle }}</div>
-      </div>
-    </div>
 
-    <div class="nav-label">Overview</div>
-    <nav class="nav">
-      <NuxtLink v-for="item in nav" :key="item.to" :to="item.to" class="nav-item" :class="{ active: isActive(item.to) }">
-        <v-icon :icon="isActive(item.to) ? item.activeIcon : item.icon" size="20" />
-        <span>{{ item.title }}</span>
-      </NuxtLink>
-    </nav>
-
-    <template v-if="adminNav.length">
-      <div class="nav-label">Settings</div>
+      <div class="nav-label">Overview</div>
       <nav class="nav">
-        <NuxtLink v-for="item in adminNav" :key="item.to" :to="item.to" class="nav-item" :class="{ active: isActive(item.to) }">
+        <NuxtLink
+          v-for="item in nav"
+          :key="item.to"
+          :to="item.to"
+          class="nav-item"
+          :class="{ active: isActive(item.to) }"
+        >
           <v-icon :icon="isActive(item.to) ? item.activeIcon : item.icon" size="20" />
           <span>{{ item.title }}</span>
         </NuxtLink>
       </nav>
-    </template>
 
-    <template #append>
-      <div class="me">
-        <v-avatar color="primary" size="38">
-          <span class="font-weight-black text-black">{{ displayName[0]?.toUpperCase() }}</span>
-        </v-avatar>
-        <div class="flex-grow-1" style="min-width: 0">
-          <div class="me-name text-truncate">{{ displayName }}</div>
-          <div class="me-role">{{ admin?.role === 'admin' ? 'Administrator' : 'Viewer' }}</div>
+      <template v-if="adminNav.length">
+        <div class="nav-label">Settings</div>
+        <nav class="nav">
+          <NuxtLink
+            v-for="item in adminNav"
+            :key="item.to"
+            :to="item.to"
+            class="nav-item"
+            :class="{ active: isActive(item.to) }"
+          >
+            <v-icon :icon="isActive(item.to) ? item.activeIcon : item.icon" size="20" />
+            <span>{{ item.title }}</span>
+          </NuxtLink>
+        </nav>
+      </template>
+
+      <template #append>
+        <div class="me">
+          <v-avatar color="primary" size="38">
+            <span class="font-weight-black text-black">{{ displayName[0]?.toUpperCase() }}</span>
+          </v-avatar>
+          <div class="flex-grow-1" style="min-width: 0">
+            <div class="me-name text-truncate">{{ displayName }}</div>
+            <div class="me-role">{{ admin?.role === 'admin' ? 'Administrator' : 'Viewer' }}</div>
+          </div>
+          <v-menu location="top end">
+            <template #activator="{ props }">
+              <v-btn v-bind="props" icon="mdi-dots-vertical" variant="text" size="small" />
+            </template>
+            <v-list density="compact" min-width="200">
+              <v-list-item prepend-icon="mdi-lock-reset" title="Change password" @click="pwDialog = true" />
+              <v-list-item prepend-icon="mdi-logout" title="Log out" base-color="error" @click="logout" />
+            </v-list>
+          </v-menu>
         </div>
-        <v-menu location="top end">
-          <template #activator="{ props }">
-            <v-btn v-bind="props" icon="mdi-dots-vertical" variant="text" size="small" />
-          </template>
-          <v-list density="compact" min-width="200">
-            <v-list-item prepend-icon="mdi-lock-reset" title="Change password" @click="pwDialog = true" />
-            <v-list-item prepend-icon="mdi-logout" title="Log out" base-color="error" @click="logout" />
-          </v-list>
-        </v-menu>
+      </template>
+    </v-navigation-drawer>
+
+    <v-app-bar flat class="topbar" height="68">
+      <v-app-bar-nav-icon v-if="!mdAndUp" @click="drawer = !drawer" />
+      <div class="mx-2 mx-md-6 flex-grow-1" style="max-width: 520px"><GlobalSearch /></div>
+      <v-spacer />
+      <div
+        class="live-pill"
+        :class="live.connected.value ? 'on' : 'off'"
+        :title="live.connected.value ? 'Updates appear instantly' : 'Reconnecting…'"
+      >
+        <span class="dot" />
+        {{ live.connected.value ? 'Live' : 'Offline' }}
       </div>
-    </template>
-  </v-navigation-drawer>
+      <v-btn
+        :icon="isDark ? 'mdi-weather-sunny' : 'mdi-weather-night'"
+        variant="text"
+        class="mx-1"
+        :title="isDark ? 'Light mode' : 'Dark mode'"
+        @click="toggleTheme"
+      />
+    </v-app-bar>
 
-  <v-app-bar flat class="topbar" height="68">
-    <v-app-bar-nav-icon v-if="!mdAndUp" @click="drawer = !drawer" />
-    <div class="mx-2 mx-md-6 flex-grow-1" style="max-width: 520px"><GlobalSearch /></div>
-    <v-spacer />
-    <div
-      class="live-pill"
-      :class="live.connected.value ? 'on' : 'off'"
-      :title="live.connected.value ? 'Updates appear instantly' : 'Reconnecting…'"
-    >
-      <span class="dot" />
-      {{ live.connected.value ? 'Live' : 'Offline' }}
-    </div>
-    <v-btn
-      :icon="isDark ? 'mdi-weather-sunny' : 'mdi-weather-night'"
-      variant="text"
-      class="mx-1"
-      :title="isDark ? 'Light mode' : 'Dark mode'"
-      @click="toggleTheme"
-    />
-  </v-app-bar>
+    <ChangePasswordDialog v-model="pwDialog" />
 
-  <ChangePasswordDialog v-model="pwDialog" />
-
-  <v-main>
-    <v-container fluid class="pa-4 pa-md-8" style="max-width: 1440px">
-      <slot />
-    </v-container>
-  </v-main>
+    <v-main>
+      <v-container fluid class="pa-4 pa-md-8" style="max-width: 1440px">
+        <slot />
+      </v-container>
+    </v-main>
+  </v-layout>
 </template>
 
 <style scoped>
@@ -197,7 +221,9 @@ const displayName = computed(() => admin.value?.displayName || admin.value?.user
   text-decoration: none;
   font-weight: 500;
   font-size: 0.92rem;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 .nav-item:hover {
   background: rgba(255, 255, 255, 0.06);
@@ -276,7 +302,11 @@ const displayName = computed(() => admin.value?.displayName || admin.value?.user
   animation: pulse 1.8s infinite;
 }
 @keyframes pulse {
-  70% { box-shadow: 0 0 0 7px rgba(46, 158, 91, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(46, 158, 91, 0); }
+  70% {
+    box-shadow: 0 0 0 7px rgba(46, 158, 91, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(46, 158, 91, 0);
+  }
 }
 </style>

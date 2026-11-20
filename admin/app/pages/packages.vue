@@ -22,12 +22,30 @@ interface PackageStats {
   totals: { sold: number; failed: number; unknown: number; revenue: number; soldNoPrice: number; buyers: number }
   today: { sold: number; revenue: number }
   byChannel: { channel: string; sold: number; revenue: number }[]
-  topPackages: { code: string; name: string | null; net: string | null; duration: string | null; price: number | null; sold: number; failed: number; revenue: number }[]
+  topPackages: {
+    code: string
+    name: string | null
+    net: string | null
+    duration: string | null
+    price: number | null
+    sold: number
+    failed: number
+    revenue: number
+  }[]
   daily: { date: string; sold: number; revenue: number }[]
   recent: Purchase[]
   data: { usersWithPackages: number; activePackages: number; remainMb: number; usedMb: number }
   inUse: { name: string | null; users: number; remainMb: number; usedMb: number }[]
-  lowData: { id: string; msisdn: string; firstName: string | null; lastName: string | null; remainMb: number | null; usedMb: number | null; updatedAt: string; packages: number }[]
+  lowData: {
+    id: string
+    msisdn: string
+    firstName: string | null
+    lastName: string | null
+    remainMb: number | null
+    usedMb: number | null
+    updatedAt: string
+    packages: number
+  }[]
 }
 
 const api = useApi()
@@ -35,7 +53,10 @@ const range = ref(lastDays(30))
 const periodText = computed(() => rangeText(range.value))
 const { data, pending, error, refresh } = await useAsyncData(
   'package-stats',
-  () => api<PackageStats>('/stats/packages', { query: { from: rangeIso(range.value.from), to: rangeIso(range.value.to, true) } }),
+  () =>
+    api<PackageStats>('/stats/packages', {
+      query: { from: rangeIso(range.value.from), to: rangeIso(range.value.to, true) },
+    }),
   { watch: [range] },
 )
 const refreshSoon = debounce(() => refresh(), 1500)
@@ -47,7 +68,11 @@ const metric = ref<'revenue' | 'sold'>('revenue')
 const trend = computed(() =>
   (data.value?.daily ?? []).map((d) => ({
     label: d.date.slice(8),
-    title: new Date(`${d.date}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }),
+    title: new Date(`${d.date}T00:00:00`).toLocaleDateString('en-GB', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+    }),
     value: metric.value === 'revenue' ? Math.round(d.revenue) : d.sold,
   })),
 )
@@ -75,7 +100,9 @@ const packageRows = computed(() =>
   (data.value?.topPackages ?? []).map((p) => ({
     id: p.code,
     label: p.name || `Package ${p.code}`,
-    sublabel: [p.net, p.duration, p.price != null ? formatMoney(p.price) : null, `${p.sold} sold`].filter(Boolean).join(' · '),
+    sublabel: [p.net, p.duration, p.price != null ? formatMoney(p.price) : null, `${p.sold} sold`]
+      .filter(Boolean)
+      .join(' · '),
     segments: [{ key: 'r', label: 'Revenue (₭)', value: Math.round(p.revenue), color: 'var(--series-1)' }],
   })),
 )
@@ -102,6 +129,10 @@ const purchaseHeaders = [
   { title: 'Price', key: 'price', sortable: false, align: 'end' as const },
   { title: 'Result', key: 'success', sortable: false, align: 'center' as const, width: 110 },
 ]
+
+function openPurchase(_: unknown, { item }: { item: Purchase }) {
+  navigateTo(`/events/${item.id}`)
+}
 </script>
 
 <template>
@@ -109,44 +140,90 @@ const purchaseHeaders = [
     <div class="d-flex flex-wrap align-center ga-3 mb-6">
       <div>
         <h1 class="page-title">Packages</h1>
-        <div class="text-body-2 text-medium-emphasis">Packages bought in the app, revenue, and data left on users' packages</div>
+        <div class="text-body-2 text-medium-emphasis">
+          Packages bought in the app, revenue, and data left on users' packages
+        </div>
       </div>
       <v-spacer />
       <DateRange v-model="range" />
       <v-btn icon="mdi-refresh" variant="text" :loading="pending" @click="refresh()" />
     </div>
 
-    <v-alert v-if="error" type="error" variant="tonal" class="mb-4" :text="error.data?.message || 'Could not load package data'" />
+    <v-alert
+      v-if="error"
+      type="error"
+      variant="tonal"
+      class="mb-4"
+      :text="errorMessage(error, 'Could not load package data')"
+    />
 
     <template v-if="data">
       <!-- headline numbers -->
       <v-row>
         <v-col cols="12" sm="6" lg>
-          <StatCard title="Packages sold" :value="data.totals.sold" icon="mdi-package-variant-closed" :hint="`${data.today.sold} today · ${periodText}`" />
+          <StatCard
+            title="Packages sold"
+            :value="data.totals.sold"
+            icon="mdi-package-variant-closed"
+            :hint="`${data.today.sold} today · ${periodText}`"
+          />
         </v-col>
         <v-col cols="12" sm="6" lg>
-          <StatCard title="Revenue" :value="formatMoney(data.totals.revenue)" icon="mdi-cash-multiple" color="success" :hint="`${formatMoney(data.today.revenue)} today`" />
+          <StatCard
+            title="Revenue"
+            :value="formatMoney(data.totals.revenue)"
+            icon="mdi-cash-multiple"
+            color="success"
+            :hint="`${formatMoney(data.today.revenue)} today`"
+          />
         </v-col>
         <v-col cols="12" sm="6" lg>
-          <StatCard title="Average price" :value="formatMoney(avgPrice)" icon="mdi-tag-outline" color="info" :hint="`${data.totals.buyers} different buyers`" />
+          <StatCard
+            title="Average price"
+            :value="formatMoney(avgPrice)"
+            icon="mdi-tag-outline"
+            color="info"
+            :hint="`${data.totals.buyers} different buyers`"
+          />
         </v-col>
         <v-col cols="12" sm="6" lg>
-          <StatCard title="Failed purchases" :value="data.totals.failed" icon="mdi-cart-remove" color="error" hint="e.g. not enough balance" />
+          <StatCard
+            title="Failed purchases"
+            :value="data.totals.failed"
+            icon="mdi-cart-remove"
+            color="error"
+            hint="e.g. not enough balance"
+          />
         </v-col>
         <v-col cols="12" sm="6" lg>
-          <StatCard title="Data left (all users)" :value="formatMb(data.data.remainMb)" icon="mdi-database-outline" color="purple" :hint="`${data.data.activePackages} active packages · ${data.data.usersWithPackages} users`" />
+          <StatCard
+            title="Data left (all users)"
+            :value="formatMb(data.data.remainMb)"
+            icon="mdi-database-outline"
+            color="purple"
+            :hint="`${data.data.activePackages} active packages · ${data.data.usersWithPackages} users`"
+          />
         </v-col>
       </v-row>
 
-      <v-alert v-if="data.totals.soldNoPrice" type="info" variant="tonal" rounded="lg" class="mt-4" icon="mdi-information-outline">
-        {{ data.totals.soldNoPrice }} purchase{{ data.totals.soldNoPrice > 1 ? 's were' : ' was' }} made before prices were recorded,
-        so they count as sold but not in revenue.
+      <v-alert
+        v-if="data.totals.soldNoPrice"
+        type="info"
+        variant="tonal"
+        rounded="lg"
+        class="mt-4"
+        icon="mdi-information-outline"
+      >
+        {{ data.totals.soldNoPrice }} purchase{{ data.totals.soldNoPrice > 1 ? 's were' : ' was' }} made before prices
+        were recorded, so they count as sold but not in revenue.
       </v-alert>
 
       <!-- trend -->
       <v-card class="bordered mt-4">
         <v-card-item prepend-icon="mdi-chart-bar">
-          <v-card-title class="font-weight-bold">{{ metric === 'revenue' ? 'Revenue per day' : 'Packages sold per day' }}</v-card-title>
+          <v-card-title class="font-weight-bold">{{
+            metric === 'revenue' ? 'Revenue per day' : 'Packages sold per day'
+          }}</v-card-title>
           <v-card-subtitle>{{ periodText }}</v-card-subtitle>
           <template #append>
             <v-chip-group v-model="metric" mandatory selected-class="text-primary">
@@ -156,7 +233,11 @@ const purchaseHeaders = [
           </template>
         </v-card-item>
         <v-card-text>
-          <ColumnChart :points="trend" :unit="metric === 'revenue' ? '₭' : 'packages'" :color="metric === 'revenue' ? 'var(--status-good)' : 'var(--series-1)'" />
+          <ColumnChart
+            :points="trend"
+            :unit="metric === 'revenue' ? '₭' : 'packages'"
+            :color="metric === 'revenue' ? 'var(--status-good)' : 'var(--series-1)'"
+          />
         </v-card-text>
       </v-card>
 
@@ -178,7 +259,12 @@ const purchaseHeaders = [
               <v-card-subtitle>Kip earned through each payment channel</v-card-subtitle>
             </v-card-item>
             <v-card-text>
-              <Pie3D :slices="revenueByChannel" total-label="revenue" :width="230" :format-value="(n: number) => formatMoney(n)" />
+              <Pie3D
+                :slices="revenueByChannel"
+                total-label="revenue"
+                :width="230"
+                :format-value="(n: number) => formatMoney(n)"
+              />
             </v-card-text>
           </v-card>
         </v-col>
@@ -219,7 +305,7 @@ const purchaseHeaders = [
           hide-default-footer
           density="comfortable"
           hover
-          @click:row="(_: unknown, { item }: { item: Purchase }) => navigateTo(`/events/${item.id}`)"
+          @click:row="openPurchase"
         >
           <template #item.occurredAt="{ item }">
             <div class="font-weight-bold text-mono">{{ formatTime(item.occurredAt) }}</div>
@@ -231,12 +317,16 @@ const purchaseHeaders = [
             <div class="font-weight-medium">{{ item.userId ? fullName(item) : 'Unknown' }}</div>
             <div class="text-caption text-medium-emphasis text-mono phone">
               {{ formatPhone(item.msisdn) }}
-              <template v-if="item.forWhom === 'other' && item.forNumber"> → for {{ formatPhone(String(item.forNumber).replace(/^0/, '')) }}</template>
+              <template v-if="item.forWhom === 'other' && item.forNumber">
+                → for {{ formatPhone(String(item.forNumber).replace(/^0/, '')) }}</template
+              >
             </div>
           </template>
           <template #item.package="{ item }">
             <div class="font-weight-bold">{{ item.name || (item.code ? `Package ${item.code}` : '—') }}</div>
-            <div class="text-caption text-medium-emphasis">{{ [item.net, item.duration].filter(Boolean).join(' · ') }}</div>
+            <div class="text-caption text-medium-emphasis">
+              {{ [item.net, item.duration].filter(Boolean).join(' · ') }}
+            </div>
           </template>
           <template #item.channel="{ item }">
             <span class="d-inline-flex align-center ga-1 text-body-2">
@@ -245,10 +335,18 @@ const purchaseHeaders = [
             </span>
           </template>
           <template #item.price="{ item }">
-            <span class="font-weight-black" style="font-variant-numeric: tabular-nums">{{ item.price != null ? formatMoney(item.price) : '—' }}</span>
+            <span class="font-weight-black" style="font-variant-numeric: tabular-nums">{{
+              item.price != null ? formatMoney(item.price) : '—'
+            }}</span>
           </template>
           <template #item.success="{ item }">
-            <v-chip v-if="item.success !== null" size="small" :color="item.success ? 'success' : 'error'" variant="flat" :prepend-icon="item.success ? 'mdi-check' : 'mdi-close'">
+            <v-chip
+              v-if="item.success !== null"
+              size="small"
+              :color="item.success ? 'success' : 'error'"
+              variant="flat"
+              :prepend-icon="item.success ? 'mdi-check' : 'mdi-close'"
+            >
               {{ item.success ? 'Success' : 'Failed' }}
             </v-chip>
             <span v-else class="text-medium-emphasis">—</span>
@@ -272,15 +370,21 @@ const purchaseHeaders = [
             </v-avatar>
             <div class="flex-grow-1" style="min-width: 0">
               <div class="font-weight-bold text-truncate">{{ fullName(u) }}</div>
-              <div class="text-caption text-medium-emphasis text-mono phone">{{ formatPhone(u.msisdn) }} · {{ u.packages }} package{{ u.packages === 1 ? '' : 's' }}</div>
+              <div class="text-caption text-medium-emphasis text-mono phone">
+                {{ formatPhone(u.msisdn) }} · {{ u.packages }} package{{ u.packages === 1 ? '' : 's' }}
+              </div>
             </div>
             <div class="text-right">
-              <div class="font-weight-black" :class="(u.remainMb ?? 0) < 500 ? 'text-error' : ''">{{ formatMb(u.remainMb) }} left</div>
+              <div class="font-weight-black" :class="(u.remainMb ?? 0) < 500 ? 'text-error' : ''">
+                {{ formatMb(u.remainMb) }} left
+              </div>
               <div class="text-caption text-medium-emphasis">checked {{ timeAgo(u.updatedAt) }}</div>
             </div>
             <v-icon icon="mdi-chevron-right" class="text-medium-emphasis" />
           </NuxtLink>
-          <div v-if="!data.lowData.length" class="py-8 text-center text-medium-emphasis">No data balances recorded yet</div>
+          <div v-if="!data.lowData.length" class="py-8 text-center text-medium-emphasis">
+            No data balances recorded yet
+          </div>
         </div>
       </v-card>
     </template>

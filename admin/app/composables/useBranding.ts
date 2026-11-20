@@ -1,11 +1,4 @@
-export interface Branding {
-  logo: string | null
-  name: string
-  subtitle: string
-  title: string
-  updatedAt: string | null
-  updatedBy: string | null
-}
+import type { Branding } from '~/types/api'
 
 // Default browser icon: the yellow tile with the chart line used in the sidebar.
 export const DEFAULT_FAVICON =
@@ -30,7 +23,10 @@ export function useBranding() {
 
   async function load() {
     try {
-      branding.value = { ...BRANDING_DEFAULTS, ...(await $fetch<Branding>(`${config.public.apiBase}/api/public/branding`)) }
+      branding.value = {
+        ...BRANDING_DEFAULTS,
+        ...(await $fetch<Branding>(`${config.public.apiBase}/api/v1/public/branding`)),
+      }
     } catch {
       // Keep the default logo when the API can't be reached.
     }

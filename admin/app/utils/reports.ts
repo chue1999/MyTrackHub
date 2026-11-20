@@ -1,4 +1,4 @@
-import type { AppUser, Paged, TrackedEvent } from '~/composables/useApi'
+import type { AppUser, Paged, TrackedEvent, JsonRecord } from '~/types/api'
 
 /** How a column is written to Excel and shown in the preview. */
 export type ColType = 'text' | 'number' | 'money' | 'date' | 'phone' | 'result' | 'percent'
@@ -29,7 +29,11 @@ export interface ReportDef {
   /** Which filters make sense for this report. */
   filters: ('search' | 'feature' | 'result')[]
   columns: ReportColumn[]
-  load: (api: Api, f: ReportFilters, onProgress: (loaded: number, total: number) => void) => Promise<{ rows: Row[]; total: number }>
+  load: (
+    api: Api,
+    f: ReportFilters,
+    onProgress: (loaded: number, total: number) => void,
+  ) => Promise<{ rows: Row[]; total: number }>
   summary: (rows: Row[]) => { label: string; value: string | number; type?: ColType }[]
 }
 
@@ -37,10 +41,15 @@ export interface ReportDef {
 export const MAX_ROWS = 50_000
 const PAGE = 5000
 
-async function loadAll<T>(api: Api, url: string, query: Record<string, unknown>, onProgress: (l: number, t: number) => void) {
+async function loadAll<T>(
+  api: Api,
+  url: string,
+  query: Record<string, unknown>,
+  onProgress: (l: number, t: number) => void,
+) {
   const items: T[] = []
   let page = 1
-  let total = 0
+  let total: number
   for (;;) {
     const res = await api<Paged<T>>(url, { query: { ...query, page, pageSize: PAGE } })
     total = res.total
@@ -53,7 +62,10 @@ async function loadAll<T>(api: Api, url: string, query: Record<string, unknown>,
 }
 
 const resultText = (s: boolean | null | undefined) => (s === true ? 'Success' : s === false ? 'Failed' : '')
-const bareNumber = (v: unknown) => String(v ?? '').replace(/^\+?856/, '').replace(/^0/, '')
+const bareNumber = (v: unknown) =>
+  String(v ?? '')
+    .replace(/^\+?856/, '')
+    .replace(/^0/, '')
 const num = (v: unknown) => {
   const n = Number(String(v ?? '').replace(/[^\d.-]/g, ''))
   return Number.isFinite(n) && String(v ?? '') !== '' ? n : null
@@ -83,12 +95,12 @@ const ACTIVITY_COLUMNS: ReportColumn[] = [
   { key: 'ms', header: 'Time taken (ms)', type: 'number', width: 14 },
 ]
 function activityRow(e: TrackedEvent): Row {
-  const p = (e.properties ?? {}) as Record<string, any>
+  const p = (e.properties ?? {}) as JsonRecord
   return {
     time: new Date(e.occurredAt),
     name: e.user ? fullName(e.user) : 'Guest',
     phone: e.user?.msisdn ?? e.msisdn ?? '',
-    feature: featureOf(e)?.label ?? (e.type === 'api' ? 'Other' : EVENT_META[e.type]?.label ?? e.type),
+    feature: featureOf(e)?.label ?? (e.type === 'api' ? 'Other' : (EVENT_META[e.type]?.label ?? e.type)),
     action: eventTitle(e),
     result: resultText(e.success),
     message: e.result ?? (e.type === 'logout' ? logoutReason(p.reason) : ''),
@@ -128,7 +140,12 @@ export const REPORTS: ReportDef[] = [
     filters: ['search', 'feature'],
     columns: ACTIVITY_COLUMNS,
     async load(api, f, onProgress) {
-      const { items, total } = await loadAll<TrackedEvent>(api, '/events', eventQuery({ ...f, result: 'false' }), onProgress)
+      const { items, total } = await loadAll<TrackedEvent>(
+        api,
+        '/events',
+        eventQuery({ ...f, result: 'false' }),
+        onProgress,
+      )
       return { rows: items.map(activityRow), total }
     },
     summary: activitySummary,
@@ -149,11 +166,16 @@ export const REPORTS: ReportDef[] = [
       { key: 'message', header: 'Server message', width: 36 },
     ],
     async load(api, f, onProgress) {
-      const { items, total } = await loadAll<TrackedEvent>(api, '/events', eventQuery(f, { apis: 'TransferBalance' }), onProgress)
+      const { items, total } = await loadAll<TrackedEvent>(
+        api,
+        '/events',
+        eventQuery(f, { apis: 'TransferBalance' }),
+        onProgress,
+      )
       return {
         total,
         rows: items.map((e) => {
-          const body = ((e.properties as any)?.request?.body ?? {}) as Record<string, unknown>
+          const body = ((e.properties as JsonRecord)?.request?.body ?? {}) as Record<string, unknown>
           return {
             time: new Date(e.occurredAt),
             name: e.user ? fullName(e.user) : 'Unknown',
@@ -170,7 +192,11 @@ export const REPORTS: ReportDef[] = [
       { label: 'Transfers', value: rows.length, type: 'number' },
       { label: 'Succeeded', value: rows.filter((r) => r.result === 'Success').length, type: 'number' },
       { label: 'Failed', value: rows.filter((r) => r.result === 'Failed').length, type: 'number' },
-      { label: 'Amount transferred (succeeded)', value: rows.filter((r) => r.result === 'Success').reduce((s, r) => s + (Number(r.amount) || 0), 0), type: 'money' },
+      {
+        label: 'Amount transferred (succeeded)',
+        value: rows.filter((r) => r.result === 'Success').reduce((s, r) => s + (Number(r.amount) || 0), 0),
+        type: 'money',
+      },
     ],
   },
   {
@@ -199,7 +225,7 @@ export const REPORTS: ReportDef[] = [
       return {
         total,
         rows: items.map((e) => {
-          const p = (e.properties as any) ?? {}
+          const p = (e.properties as JsonRecord) ?? {}
           const pur = (p.purchase ?? {}) as Record<string, unknown>
           const body = (p.request?.body ?? {}) as Record<string, unknown>
           return {
@@ -223,7 +249,11 @@ export const REPORTS: ReportDef[] = [
       { label: 'Purchases', value: rows.length, type: 'number' },
       { label: 'Sold (succeeded)', value: rows.filter((r) => r.result === 'Success').length, type: 'number' },
       { label: 'Failed', value: rows.filter((r) => r.result === 'Failed').length, type: 'number' },
-      { label: 'Revenue', value: rows.filter((r) => r.result === 'Success').reduce((s, r) => s + (Number(r.price) || 0), 0), type: 'money' },
+      {
+        label: 'Revenue',
+        value: rows.filter((r) => r.result === 'Success').reduce((s, r) => s + (Number(r.price) || 0), 0),
+        type: 'money',
+      },
     ],
   },
   {
@@ -295,10 +325,9 @@ export const REPORTS: ReportDef[] = [
       { key: 'api', header: 'API', width: 40 },
     ],
     async load(api, f, onProgress) {
-      const res = await api<{ apis: { name: string; uses: number; succeeded: number; failed: number; users: number; lastAt: string }[] }>(
-        '/stats/features',
-        { query: { from: f.from, to: f.to } },
-      )
+      const res = await api<{
+        apis: { name: string; uses: number; succeeded: number; failed: number; users: number; lastAt: string }[]
+      }>('/stats/features', { query: { from: f.from, to: f.to } })
       onProgress(res.apis.length, res.apis.length)
       const rows = res.apis
         .map((a) => {
@@ -334,7 +363,16 @@ export function previewCell(v: unknown, type?: ColType) {
   if (v === null || v === undefined || v === '') return '—'
   switch (type) {
     case 'date':
-      return v instanceof Date ? v.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : String(v)
+      return v instanceof Date
+        ? v.toLocaleString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+          })
+        : String(v)
     case 'money':
       return formatMoney(v)
     case 'number':

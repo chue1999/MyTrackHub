@@ -11,3 +11,6 @@ admin/dist/
 
 .DS_Store
 *.log
+
+# Tests
+coverage/
