@@ -110,6 +110,12 @@ const parts = computed(() => {
   }
   return { fields, nested, notes }
 })
+
+/** Long text is cut with "…"; clicking it shows (or hides) the whole text. */
+function toggle(e: MouseEvent) {
+  const el = e.currentTarget as HTMLElement
+  if (el.classList.contains('open') || el.scrollWidth > el.clientWidth) el.classList.toggle('open')
+}
 </script>
 
 <template>
@@ -128,7 +134,7 @@ const parts = computed(() => {
           <template v-if="isObj(row)">
             <td v-for="c in columns(value as unknown[])" :key="c" :class="tone(c, (row as Obj)[c])">
               <DataView v-if="!isScalar((row as Obj)[c])" :value="(row as Obj)[c]" :depth="depth + 1" />
-              <template v-else>{{ show(c, (row as Obj)[c]) }}</template>
+              <div v-else class="clip cell" :title="show(c, (row as Obj)[c])" @click="toggle">{{ show(c, (row as Obj)[c]) }}</div>
             </td>
           </template>
           <!-- "… N more items" marker added by the app when a list was shortened -->
@@ -143,7 +149,7 @@ const parts = computed(() => {
     <div v-if="parts.fields.length" class="dv-fields">
       <div v-for="[k, v] in parts.fields" :key="k" class="dv-field">
         <div class="dv-label">{{ label(k) }}</div>
-        <div class="dv-value" :class="tone(k, v)">{{ show(k, v) }}</div>
+        <div class="dv-value clip" :class="tone(k, v)" :title="show(k, v)" @click="toggle">{{ show(k, v) }}</div>
       </div>
     </div>
     <div v-for="n in parts.notes" :key="n" class="dv-note">
@@ -162,12 +168,12 @@ const parts = computed(() => {
 
   <!-- list of plain values -->
   <div v-else-if="Array.isArray(value)" class="dv-chips">
-    <span v-for="(x, i) in value" :key="i" class="dv-chip">{{ show('', x) }}</span>
+    <span v-for="(x, i) in value" :key="i" class="dv-chip clip" :title="show('', x)" @click="toggle">{{ show('', x) }}</span>
     <span v-if="!value.length" class="dv-empty">Empty list</span>
   </div>
 
   <!-- single value -->
-  <div v-else class="dv-value">{{ show('', value) }}</div>
+  <div v-else class="dv-value clip" :title="show('', value)" @click="toggle">{{ show('', value) }}</div>
 </template>
 
 <style scoped>
@@ -190,7 +196,6 @@ const parts = computed(() => {
 .dv-value {
   font-size: 0.95rem;
   font-weight: 600;
-  word-break: break-word;
 }
 .dv-value.strong {
   font-weight: 800;
@@ -286,5 +291,29 @@ td.money {
 .dv-empty {
   font-size: 0.85rem;
   color: rgba(var(--v-theme-on-surface), 0.5);
+}
+.clip {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: default;
+}
+.clip.cell {
+  max-width: 320px;
+}
+.dv-chip.clip {
+  display: inline-block;
+  max-width: 320px;
+}
+.clip.open {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.clip:not(.open):hover {
+  cursor: pointer;
 }
 </style>
