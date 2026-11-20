@@ -720,18 +720,23 @@ router.post('/settings/retention/run', requireRoleAdmin, async (req, res, next) 
 
 // ── settings: website logo ───────────────────────────────────────────
 
-const brandingSchema = z.object({
-  logo: z
-    .string()
-    .max(LOGO_MAX_CHARS, 'The logo file is too big (max about 500 KB)')
-    .regex(LOGO_PATTERN, 'Use a PNG, JPG, WEBP or SVG image')
-    .nullable(),
-});
+const brandingSchema = z
+  .object({
+    logo: z
+      .string()
+      .max(LOGO_MAX_CHARS, 'The logo file is too big (max about 500 KB)')
+      .regex(LOGO_PATTERN, 'Use a PNG, JPG, WEBP or SVG image')
+      .nullable(),
+    name: z.string().trim().min(1, 'Enter the website name').max(40, 'Website name: 40 characters max'),
+    subtitle: z.string().trim().max(60, 'Subtitle: 60 characters max'),
+    title: z.string().trim().min(1, 'Enter the browser tab title').max(80, 'Browser tab title: 80 characters max'),
+  })
+  .partial(); // send only what changed (e.g. just the logo, or just the names)
 
 router.put('/settings/branding', requireRoleAdmin, async (req, res, next) => {
   try {
-    const { logo } = brandingSchema.parse(req.body);
-    const saved = await saveBranding({ logo, updatedAt: new Date().toISOString(), updatedBy: req.me.username });
+    const patch = brandingSchema.parse(req.body);
+    const saved = await saveBranding({ ...patch, updatedAt: new Date().toISOString(), updatedBy: req.me.username });
     // Every open admin page swaps the logo and the browser icon right away.
     broadcast('branding', { updatedAt: saved.updatedAt });
     res.json(saved);

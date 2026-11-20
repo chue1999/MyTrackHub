@@ -5,9 +5,18 @@ const KEY = 'branding';
 export const LOGO_PATTERN = /^data:image\/(png|jpeg|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/;
 export const LOGO_MAX_CHARS = 700_000; // about 500 KB of image
 
+export const DEFAULTS = {
+  logo: null,
+  name: 'MyTPlus',
+  subtitle: 'Activity Center',
+  title: 'MyTPlus Activity',
+  updatedAt: null,
+  updatedBy: null,
+};
+
 export async function getBranding() {
   const row = await Setting.findByPk(KEY);
-  return { logo: null, updatedAt: null, updatedBy: null, ...(row?.value ?? {}) };
+  return { ...DEFAULTS, ...(row?.value ?? {}) };
 }
 
 export async function saveBranding(patch) {

@@ -2,6 +2,7 @@
 import type { Row } from '~/utils/reports'
 
 const api = useApi()
+const { branding } = useBranding()
 const route = useRoute()
 
 const reportKey = ref(REPORT_BY_KEY[String(route.query.report)] ? String(route.query.report) : 'activity')
@@ -70,7 +71,7 @@ async function exportNow() {
   try {
     const day = new Date().toISOString().slice(0, 10)
     await exportExcel({
-      title: `MyTPlus: ${report.value.label}`,
+      title: `${branding.value.name}: ${report.value.label}`,
       periodText: rangeText(range.value),
       filtersText: filtersText.value,
       columns: report.value.columns,

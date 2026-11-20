@@ -55,9 +55,9 @@ const displayName = computed(() => admin.value?.displayName || admin.value?.user
       <div class="brand-logo" :class="{ custom: branding.logo }">
         <BrandMark size="24" />
       </div>
-      <div>
-        <div class="brand-name">MyTPlus</div>
-        <div class="brand-sub">Activity Center</div>
+      <div style="min-width: 0">
+        <div class="brand-name">{{ branding.name }}</div>
+        <div v-if="branding.subtitle" class="brand-sub">{{ branding.subtitle }}</div>
       </div>
     </div>
 
@@ -155,6 +155,12 @@ const displayName = computed(() => admin.value?.displayName || admin.value?.user
 .brand-logo.custom {
   background: #fff;
   overflow: hidden;
+}
+.brand-name,
+.brand-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .brand-name {
   font-weight: 800;

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+const { branding } = useBranding()
 definePageMeta({ layout: false })
 
 const { login } = useAuth()
@@ -49,8 +50,8 @@ const sample = [
             <BrandMark size="26" color="#F5B800" />
           </div>
           <div>
-            <div class="text-h6 font-weight-black">MyTPlus</div>
-            <div class="text-caption font-weight-medium" style="opacity: 0.75">Activity Center</div>
+            <div class="text-h6 font-weight-black">{{ branding.name }}</div>
+            <div v-if="branding.subtitle" class="text-caption font-weight-medium" style="opacity: 0.75">{{ branding.subtitle }}</div>
           </div>
         </div>
 
@@ -96,7 +97,7 @@ const sample = [
             <div class="logo logo--dark">
               <BrandMark size="24" />
             </div>
-            <div class="text-h6 font-weight-black">MyTPlus Activity</div>
+            <div class="text-h6 font-weight-black">{{ branding.title }}</div>
           </div>
 
           <div class="text-overline text-primary font-weight-bold">Admin</div>

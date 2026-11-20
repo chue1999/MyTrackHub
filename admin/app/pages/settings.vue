@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { BRANDING_DEFAULTS as BRANDING_DEFAULTS_, type Branding } from '~/composables/useBranding'
 interface Retention {
   enabled: boolean
   months: number
@@ -107,12 +108,34 @@ async function runNow() {
 // ── website logo ──
 const { branding, load: loadBranding } = useBranding()
 const defaultFavicon = DEFAULT_FAVICON
+const BRANDING_DEFAULTS = BRANDING_DEFAULTS_
 const logoDraft = ref<string | null | undefined>(undefined) // undefined = no change
 const logoError = ref('')
 const logoSaving = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 const shownLogo = computed(() => (logoDraft.value === undefined ? branding.value.logo : logoDraft.value))
-const logoChanged = computed(() => logoDraft.value !== undefined && logoDraft.value !== branding.value.logo)
+const names = reactive({ name: '', subtitle: '', title: '' })
+const resetNames = () => Object.assign(names, { name: branding.value.name, subtitle: branding.value.subtitle, title: branding.value.title })
+watch(() => [branding.value.name, branding.value.subtitle, branding.value.title], resetNames, { immediate: true })
+const namesChanged = computed(
+  () => names.name.trim() !== branding.value.name || names.subtitle.trim() !== branding.value.subtitle || names.title.trim() !== branding.value.title,
+)
+const logoChanged = computed(
+  () => (logoDraft.value !== undefined && logoDraft.value !== branding.value.logo) || namesChanged.value,
+)
+const nameRules = {
+  name: (v: string) => (!!v.trim() && v.trim().length <= 40) || '1–40 characters',
+  subtitle: (v: string) => v.trim().length <= 60 || '60 characters max',
+  title: (v: string) => (!!v.trim() && v.trim().length <= 80) || '1–80 characters',
+}
+function cancelBrand() {
+  logoDraft.value = undefined
+  resetNames()
+}
+function useDefaults() {
+  logoDraft.value = null
+  Object.assign(names, { name: BRANDING_DEFAULTS.name, subtitle: BRANDING_DEFAULTS.subtitle, title: BRANDING_DEFAULTS.title })
+}
 
 function readAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
@@ -171,11 +194,17 @@ async function saveLogo() {
   logoSaving.value = true
   logoError.value = ''
   try {
-    branding.value = await api('/settings/branding', { method: 'PUT', body: { logo: logoDraft.value ?? null } })
+    for (const k of ['name', 'subtitle', 'title'] as const) {
+      const ok = nameRules[k](names[k])
+      if (ok !== true) throw { data: { message: `${k === 'title' ? 'Browser tab title' : k === 'name' ? 'Website name' : 'Subtitle'}: ${ok}` } }
+    }
+    const body: Record<string, unknown> = { name: names.name.trim(), subtitle: names.subtitle.trim(), title: names.title.trim() }
+    if (logoDraft.value !== undefined) body.logo = logoDraft.value
+    branding.value = { ...BRANDING_DEFAULTS, ...(await api<Branding>('/settings/branding', { method: 'PUT', body })) }
     logoDraft.value = undefined
-    Object.assign(snack, { show: true, color: 'success', text: 'Logo saved: the browser icon is updated too' })
+    Object.assign(snack, { show: true, color: 'success', text: 'Saved: the sidebar, login page and browser tab are updated' })
   } catch (e: any) {
-    logoError.value = e?.data?.message || 'Could not save the logo'
+    logoError.value = e?.data?.message || 'Could not save'
   } finally {
     logoSaving.value = false
   }
@@ -187,7 +216,7 @@ onMounted(loadBranding)
   <div>
     <div class="mb-6">
       <h1 class="page-title">Settings</h1>
-      <div class="text-body-2 text-medium-emphasis">Website logo and how long the logs are kept</div>
+      <div class="text-body-2 text-medium-emphasis">Website name, logo and how long the logs are kept</div>
     </div>
 
     <v-alert v-if="error" type="error" variant="tonal" rounded="lg" class="mb-4" :text="error" />
@@ -199,8 +228,8 @@ onMounted(loadBranding)
       <div class="head">
         <div class="head-icon"><v-icon icon="mdi-image-outline" size="26" /></div>
         <div class="flex-grow-1">
-          <div class="text-h6 font-weight-black">Website logo</div>
-          <div class="text-body-2 text-medium-emphasis">Shown in the sidebar, on the login page and as the browser tab icon</div>
+          <div class="text-h6 font-weight-black">Website name &amp; logo</div>
+          <div class="text-body-2 text-medium-emphasis">Shown in the sidebar, on the login page and in the browser tab</div>
         </div>
       </div>
 
@@ -221,13 +250,42 @@ onMounted(loadBranding)
           <input ref="fileInput" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden @change="pickLogo" />
 
           <!-- where it appears -->
-          <div class="flex-grow-1">
+          <div class="flex-grow-1" style="min-width: 0">
+            <div class="name-grid mb-5">
+              <v-text-field
+                v-model="names.name"
+                label="Website name"
+                :rules="[nameRules.name]"
+                :disabled="!canEdit"
+                counter="40"
+                prepend-inner-icon="mdi-format-title"
+                density="comfortable"
+              />
+              <v-text-field
+                v-model="names.subtitle"
+                label="Subtitle (under the name)"
+                :rules="[nameRules.subtitle]"
+                :disabled="!canEdit"
+                counter="60"
+                prepend-inner-icon="mdi-text-short"
+                density="comfortable"
+              />
+              <v-text-field
+                v-model="names.title"
+                label="Browser tab title"
+                :rules="[nameRules.title]"
+                :disabled="!canEdit"
+                counter="80"
+                prepend-inner-icon="mdi-tab"
+                density="comfortable"
+              />
+            </div>
             <div class="label">Preview</div>
             <div class="previews">
               <div class="pv pv-tab">
                 <div class="tab">
                   <span class="tab-icon"><img :src="shownLogo || defaultFavicon" alt="" /></span>
-                  <span class="tab-title">MyTPlus Activity</span>
+                  <span class="tab-title">{{ names.title || BRANDING_DEFAULTS.title }}</span>
                   <v-icon icon="mdi-close" size="14" class="ml-auto" />
                 </div>
                 <div class="pv-cap">Browser tab</div>
@@ -239,8 +297,8 @@ onMounted(loadBranding)
                     <v-icon v-else icon="mdi-chart-timeline-variant" size="20" color="black" />
                   </span>
                   <span>
-                    <span class="side-name">MyTPlus</span>
-                    <span class="side-sub">Activity Center</span>
+                    <span class="side-name">{{ names.name || BRANDING_DEFAULTS.name }}</span>
+                    <span v-if="names.subtitle" class="side-sub">{{ names.subtitle }}</span>
                   </span>
                 </div>
                 <div class="pv-cap">Sidebar</div>
@@ -265,15 +323,15 @@ onMounted(loadBranding)
             color="error"
             class="text-none"
             prepend-icon="mdi-restore"
-            :disabled="!shownLogo || logoSaving"
-            @click="logoDraft = null"
+            :disabled="logoSaving"
+            @click="useDefaults"
           >
-            Use default logo
+            Use defaults
           </v-btn>
           <v-spacer />
-          <v-btn variant="text" class="text-none" :disabled="!logoChanged || logoSaving" @click="logoDraft = undefined">Cancel</v-btn>
+          <v-btn variant="text" class="text-none" :disabled="!logoChanged || logoSaving" @click="cancelBrand">Cancel</v-btn>
           <v-btn color="primary" variant="flat" class="text-none px-6" prepend-icon="mdi-content-save-outline" :loading="logoSaving" :disabled="!logoChanged" @click="saveLogo">
-            Save logo
+            Save
           </v-btn>
         </v-card-actions>
       </template>
@@ -567,5 +625,17 @@ onMounted(loadBranding)
   display: block;
   font-size: 0.72rem;
   opacity: 0.6;
+}
+.name-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 4px 12px;
+}
+.tab-title,
+.side-name,
+.side-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

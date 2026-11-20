@@ -85,7 +85,7 @@ const oldFormat = computed(() => isApi.value && !hasPayload.value && e.value?.su
 const tone = computed(() => status.value?.tone ?? (oldFormat.value ? 'old' : 'neutral'))
 const headIcon = computed(() => status.value?.icon ?? (e.value ? EVENT_META[e.value.type]?.icon : 'mdi-help'))
 
-useHead(() => ({ title: e.value ? `${eventTitle(e.value)} · MyTPlus Activity` : 'Action · MyTPlus Activity' }))
+useHead(() => ({ title: e.value ? eventTitle(e.value) : 'Action' }))
 </script>
 
 <template>
