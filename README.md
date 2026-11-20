@@ -178,7 +178,7 @@ admin/
 │   ├── types/            API data types (api.ts)
 │   ├── utils/            formatting, app-feature catalogue, reports, Excel export, errors
 │   ├── middleware/       login guard
-│   ├── plugins/          branding (browser tab title & icon)
+│   ├── plugins/          Vuetify theme, branding (browser tab title & icon)
 │   └── assets/           global CSS (fonts, chart colours)
 └── nuxt.config.ts · eslint.config.mjs · .prettierrc.json · tsconfig.json
 ```
