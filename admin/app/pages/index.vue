@@ -6,6 +6,7 @@ interface Overview {
   daily: { date: string; activeUsers: number; events: number; logins: number }[]
   topScreens: { name: string; count: number; users: number }[]
   topTaps: { name: string; count: number; users: number }[]
+  topApis: { name: string; count: number; users: number; avgMs: number | null; failed: number }[]
 }
 
 const api = useApi()
@@ -163,6 +164,44 @@ live.onEvents(({ events }) => {
           </v-card>
         </v-col>
       </v-row>
+
+      <v-card class="bordered mt-4">
+        <v-card-item prepend-icon="mdi-api">
+          <v-card-title class="font-weight-bold">Most used APIs</v-card-title>
+          <v-card-subtitle>Every API call the app made, last {{ days }} days</v-card-subtitle>
+        </v-card-item>
+        <v-table density="comfortable">
+          <thead>
+            <tr>
+              <th>API</th>
+              <th class="text-end">Calls</th>
+              <th class="text-end">Users</th>
+              <th class="text-end">Avg time</th>
+              <th class="text-end">Failed</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="a in data.topApis" :key="a.name">
+              <td class="text-mono text-body-2">
+                <v-chip size="x-small" variant="tonal" :color="a.name.startsWith('GET') ? 'info' : 'purple'" class="mr-2">
+                  {{ a.name.split(' ')[0] }}
+                </v-chip>
+                {{ a.name.split(' ').slice(1).join(' ') }}
+              </td>
+              <td class="text-end font-weight-bold">{{ a.count.toLocaleString() }}</td>
+              <td class="text-end">{{ a.users }}</td>
+              <td class="text-end">{{ a.avgMs != null ? `${a.avgMs} ms` : '—' }}</td>
+              <td class="text-end">
+                <v-chip v-if="a.failed" size="small" color="error" variant="tonal">{{ a.failed }}</v-chip>
+                <span v-else class="text-medium-emphasis">0</span>
+              </td>
+            </tr>
+            <tr v-if="!data.topApis.length">
+              <td colspan="5" class="text-center text-medium-emphasis py-6">No API calls yet</td>
+            </tr>
+          </tbody>
+        </v-table>
+      </v-card>
     </template>
 
     <div v-else-if="pending" class="d-flex justify-center py-16">

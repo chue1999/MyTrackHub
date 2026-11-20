@@ -118,12 +118,24 @@ router.get('/stats/overview', async (req, res, next) => {
         { replacements: { type, since }, type: QueryTypes.SELECT },
       );
     const [topScreens, topTaps] = await Promise.all([top('screen_view'), top('tap')]);
+    const topApis = await sequelize.query(
+      `SELECT name, COUNT(*)::int AS count, COUNT(DISTINCT user_id)::int AS users,
+              ROUND(AVG((properties->>'ms')::numeric))::int AS "avgMs",
+              COUNT(*) FILTER (WHERE (properties->>'ok')::boolean IS NOT TRUE)::int AS failed
+         FROM events
+        WHERE type = 'api' AND occurred_at >= :since
+        GROUP BY name
+        ORDER BY count DESC
+        LIMIT 10`,
+      { replacements: { since }, type: QueryTypes.SELECT },
+    );
 
     res.json({
       totals: { totalUsers, newUsersToday, activeToday, eventsToday, loginsToday },
       daily,
       topScreens,
       topTaps,
+      topApis,
     });
   } catch (err) {
     next(err);

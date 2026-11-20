@@ -44,7 +44,7 @@ export interface TrackedEvent {
   userId: string | null
   msisdn: string | null
   sessionId: string | null
-  type: 'login' | 'logout' | 'screen_view' | 'tap' | 'action' | 'error'
+  type: 'login' | 'logout' | 'screen_view' | 'tap' | 'action' | 'api' | 'error'
   name: string
   screen: string | null
   properties: Record<string, unknown>

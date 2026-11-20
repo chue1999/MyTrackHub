@@ -24,7 +24,7 @@ export const AppUser = sequelize.define(
   },
 );
 
-export const EVENT_TYPES = ['login', 'logout', 'screen_view', 'tap', 'action', 'error'];
+export const EVENT_TYPES = ['login', 'logout', 'screen_view', 'tap', 'action', 'api', 'error'];
 
 /** One thing a user did: logged in, opened a screen, tapped a button… */
 export const Event = sequelize.define(

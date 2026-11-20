@@ -4,6 +4,7 @@ export const EVENT_META: Record<string, { label: string; icon: string; color: st
   screen_view: { label: 'Opened screen', icon: 'mdi-cellphone-screenshot', color: 'info' },
   tap: { label: 'Tapped', icon: 'mdi-gesture-tap', color: 'warning' },
   action: { label: 'Action', icon: 'mdi-lightning-bolt', color: 'primary' },
+  api: { label: 'API call', icon: 'mdi-api', color: 'purple' },
   error: { label: 'Error', icon: 'mdi-alert-circle-outline', color: 'error' },
 }
 

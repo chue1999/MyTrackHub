@@ -34,7 +34,7 @@ npm run seed:admin -- <username> <password> [display name]
 | Table       | What it holds |
 |-------------|---------------|
 | `app_users` | One row per phone number: name, device, app version, login count, first/last seen |
-| `events`    | One row per action: `login`, `logout`, `screen_view`, `tap`, `action`, `error` + screen, properties, time, session, device |
+| `events`    | One row per action: `login`, `logout`, `screen_view`, `tap`, `action`, `api`, `error` + screen, properties, time, session, device |
 | `admins`    | Admin website accounts (bcrypt-hashed passwords) |
 
 ### Endpoints
@@ -113,6 +113,11 @@ What it records automatically:
 - **tap**: every service button (`ServiceButton`)
 - **logout**: from Settings → Logout
 - **app_opened**: when the app comes back to the foreground
+- **api**: every API call the app makes (all `Dio` clients are created with
+  `trackedDio()`): method + path, status, duration. Bodies are never recorded,
+  and numbers/ids in paths are replaced (`/user/:num/history`).
+- Users already logged in are identified from the phone number the app saved
+  at login, so they show up without logging in again.
 
 Add your own anywhere:
 
