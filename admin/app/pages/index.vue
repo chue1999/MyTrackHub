@@ -15,6 +15,7 @@ interface Transfer {
 }
 interface Overview {
   outdatedRecent: number
+  recentFailures: TrackedEvent[]
   logouts: { full: number; toPassword: number; fullToday: number; toPasswordToday: number }
   totals: {
     totalUsers: number
@@ -246,6 +247,39 @@ live.onEvents(({ events }) => {
       </v-alert>
 
 
+      <!-- needs attention: today's failures -->
+      <v-card v-if="data.recentFailures.length" class="bordered attention mt-4">
+        <div class="attention-head">
+          <div class="attention-icon"><v-icon icon="mdi-alert-octagon-outline" size="26" /></div>
+          <div class="flex-grow-1">
+            <div class="attention-title">Needs attention</div>
+            <div class="attention-sub">
+              {{ data.totals.failedToday }} action{{ data.totals.failedToday > 1 ? 's' : '' }} failed today. The latest are below. Click one to see what happened.
+            </div>
+          </div>
+          <v-btn to="/events" variant="flat" color="error" rounded="lg" class="text-none" append-icon="mdi-arrow-right">
+            All failures
+          </v-btn>
+        </div>
+        <div class="fail-list">
+          <NuxtLink v-for="f in data.recentFailures" :key="f.id" :to="`/events/${f.id}`" class="fail-item">
+            <div class="fail-dot"><v-icon icon="mdi-close" size="16" /></div>
+            <div class="flex-grow-1" style="min-width: 0">
+              <div class="d-flex align-center ga-2">
+                <span class="font-weight-bold text-truncate">{{ eventTitle(f) }}</span>
+                <span v-if="apiSummaryLine(f)" class="fail-summary text-truncate">{{ apiSummaryLine(f) }}</span>
+              </div>
+              <div class="fail-msg text-truncate">{{ f.result || 'Failed' }}</div>
+            </div>
+            <div class="text-right flex-shrink-0">
+              <div class="text-body-2 font-weight-medium text-truncate" style="max-width: 160px">{{ f.user ? fullName(f.user) : 'Guest' }}</div>
+              <div class="text-caption text-medium-emphasis text-mono">{{ formatTime(f.occurredAt) }}</div>
+            </div>
+            <v-icon icon="mdi-chevron-right" class="text-medium-emphasis" />
+          </NuxtLink>
+        </div>
+      </v-card>
+
       <!-- daily trend -->
       <v-card class="bordered mt-4">
         <v-card-item>
@@ -284,7 +318,7 @@ live.onEvents(({ events }) => {
               <v-card-subtitle>All actions by type · {{ days }} days</v-card-subtitle>
             </v-card-item>
             <v-card-text>
-              <DonutChart :slices="typeSlices" center-label="Actions" :size="180" />
+              <Pie3D :slices="typeSlices" total-label="actions" :width="230" />
             </v-card-text>
           </v-card>
         </v-col>
@@ -295,7 +329,7 @@ live.onEvents(({ events }) => {
               <v-card-subtitle>Did the app's requests work? · {{ days }} days</v-card-subtitle>
             </v-card-item>
             <v-card-text>
-              <DonutChart :slices="resultSlices" center-label="API calls" :size="180" />
+              <Pie3D :slices="resultSlices" total-label="API calls" :width="230" />
             </v-card-text>
           </v-card>
         </v-col>
@@ -307,7 +341,7 @@ live.onEvents(({ events }) => {
             </v-card-item>
             <v-card-text>
               <transition-group name="feed" tag="div">
-                <div v-for="e in feed" :key="e.id" class="d-flex align-center ga-3 py-2 feed-row">
+                <NuxtLink v-for="e in feed" :key="e.id" :to="`/events/${e.id}`" class="d-flex align-center ga-3 py-2 feed-row">
                   <v-avatar
                     :color="e.type === 'api' ? (e.success === false ? 'error' : 'success') : EVENT_META[e.type]?.color"
                     size="30"
@@ -323,7 +357,7 @@ live.onEvents(({ events }) => {
                     </div>
                   </div>
                   <span class="text-caption text-medium-emphasis text-mono">{{ formatTime(e.occurredAt) }}</span>
-                </div>
+                </NuxtLink>
               </transition-group>
               <div v-if="!feed.length" class="text-medium-emphasis text-center py-8">
                 <v-icon icon="mdi-timer-sand" size="32" class="mb-2" />
@@ -352,6 +386,8 @@ live.onEvents(({ events }) => {
           hide-default-footer
           density="comfortable"
           class="transfer-table"
+          hover
+          @click:row="(_: unknown, { item }: { item: Transfer }) => navigateTo(`/events/${item.id}`)"
         >
           <template #item.occurredAt="{ item }">
             <div class="font-weight-bold text-mono">{{ formatTime(item.occurredAt) }}</div>
@@ -543,6 +579,85 @@ live.onEvents(({ events }) => {
 .feed-enter-from {
   opacity: 0;
   transform: translateY(-8px);
+}
+.feed-row {
+  color: inherit;
+  text-decoration: none;
+  border-radius: 10px;
+}
+.feed-row:hover {
+  background: rgba(var(--v-theme-on-surface), 0.04);
+}
+.attention {
+  overflow: hidden;
+}
+.attention-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 18px 20px;
+  background: linear-gradient(120deg, rgba(217, 68, 58, 0.12), rgba(217, 68, 58, 0.04));
+  border-bottom: 1px solid rgba(217, 68, 58, 0.15);
+}
+.attention-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(135deg, #e2574c, #c93b32);
+  box-shadow: 0 6px 16px rgba(201, 59, 50, 0.3);
+}
+.attention-title {
+  font-weight: 800;
+  font-size: 1.05rem;
+}
+.attention-sub {
+  font-size: 0.85rem;
+  color: rgba(var(--v-theme-on-surface), 0.65);
+}
+.fail-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+}
+.fail-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.06);
+  transition: background 0.15s;
+}
+.fail-item:hover {
+  background: rgba(217, 68, 58, 0.05);
+}
+.fail-dot {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: #fff;
+  background: #d9443a;
+}
+.fail-summary {
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 6px;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+}
+.fail-msg {
+  font-size: 0.85rem;
+  color: #c0392b;
+}
+.v-theme--dark .fail-msg {
+  color: #ff8a80;
 }
 .feed-row + .feed-row {
   border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));

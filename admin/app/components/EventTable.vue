@@ -19,11 +19,8 @@ const headers = computed(() => [
   { title: '', key: 'open', sortable: false, width: 44 },
 ])
 
-const selected = ref<TrackedEvent | null>(null)
-const dialog = ref(false)
 function open(e: TrackedEvent) {
-  selected.value = e
-  dialog.value = true
+  navigateTo(`/events/${e.id}`)
 }
 
 const iconColor = (e: TrackedEvent) => {
@@ -142,7 +139,6 @@ const p = (e: TrackedEvent) => e.properties as Record<string, any>
       </template>
     </v-data-table-server>
 
-    <EventDetailDialog v-model="dialog" :event="selected" />
   </div>
 </template>
 

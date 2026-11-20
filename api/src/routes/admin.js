@@ -291,9 +291,18 @@ router.get('/stats/overview', async (req, res, next) => {
       },
     });
 
+    // Today's most recent failures (the "Needs attention" card).
+    const recentFailures = await Event.findAll({
+      where: { success: false, occurredAt: { [Op.gte]: startOfToday } },
+      order: [['occurredAt', 'DESC'], ['id', 'DESC']],
+      limit: 6,
+      include: [{ model: AppUser, as: 'user', attributes: ['id', 'msisdn', 'firstName', 'lastName'] }],
+    });
+
     res.json({
       totals: { totalUsers, newUsersToday, activeToday, eventsToday, loginsToday, failedToday },
       outdatedRecent,
+      recentFailures,
       logouts,
       byType,
       apiResults,
@@ -438,6 +447,20 @@ router.get('/events', async (req, res, next) => {
       include: [{ model: AppUser, as: 'user', attributes: ['id', 'msisdn', 'firstName', 'lastName'] }],
     });
     res.json({ items: rows, total: count, page, pageSize });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** GET /events/:id — one event, for the details page. */
+router.get('/events/:id', async (req, res, next) => {
+  try {
+    if (!/^\d{1,18}$/.test(req.params.id)) return res.status(404).json({ message: 'Action not found' });
+    const event = await Event.findByPk(req.params.id, {
+      include: [{ model: AppUser, as: 'user', attributes: ['id', 'msisdn', 'firstName', 'lastName'] }],
+    });
+    if (!event) return res.status(404).json({ message: 'Action not found' });
+    res.json(event);
   } catch (err) {
     next(err);
   }
