@@ -1,0 +1,11 @@
+html {
+  overflow-y: auto;
+}
+
+.v-card.bordered {
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
+.text-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
