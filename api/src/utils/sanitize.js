@@ -17,7 +17,9 @@ export function sanitizeProperties(input, depth = 0) {
   if (input == null || typeof input !== 'object') return {};
   if (depth > 5) return {};
   const out = Array.isArray(input) ? [] : {};
-  for (const [key, value] of Object.entries(input).slice(0, 50)) {
+  // Objects keep up to 60 fields; lists (e.g. a package table) up to 200 rows.
+  const limit = Array.isArray(input) ? 200 : 60;
+  for (const [key, value] of Object.entries(input).slice(0, limit)) {
     if (isSensitiveKey(key)) continue;
     if (value && typeof value === 'object') {
       out[key] = sanitizeProperties(value, depth + 1);

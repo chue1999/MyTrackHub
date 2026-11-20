@@ -42,6 +42,9 @@ export interface AppUser {
   dataRemainMb?: number | null
   dataUsedMb?: number | null
   packagesUpdatedAt?: string | null
+  actionCount?: number
+  failedCount?: number
+  packageCount?: number
 }
 
 export interface TrackedEvent {

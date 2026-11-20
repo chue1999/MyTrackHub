@@ -476,14 +476,27 @@ router.get('/users', async (req, res, next) => {
         ...(digits ? [{ msisdn: { [Op.like]: like(digits) } }] : []),
       ];
     }
-    const sortable = { lastSeenAt: 'lastSeenAt', loginCount: 'loginCount', firstSeenAt: 'firstSeenAt' };
-    const sort = sortable[req.query.sort] || 'lastSeenAt';
+    const sortable = {
+      lastSeenAt: ['lastSeenAt', 'DESC'],
+      loginCount: ['loginCount', 'DESC'],
+      firstSeenAt: ['firstSeenAt', 'DESC'],
+      dataRemainMb: ['dataRemainMb', 'ASC NULLS LAST'],
+    };
+    const sort = sortable[req.query.sort] || sortable.lastSeenAt;
 
     const { rows, count } = await AppUser.findAndCountAll({
       where,
-      order: [[sort, 'DESC']],
+      order: [sort],
       limit: pageSize,
       offset,
+      attributes: {
+        exclude: ['activePackages'],
+        include: [
+          [sequelize.literal('(SELECT COUNT(*)::int FROM events e WHERE e.user_id = "AppUser"."id")'), 'actionCount'],
+          [sequelize.literal('(SELECT COUNT(*)::int FROM events e WHERE e.user_id = "AppUser"."id" AND e.success IS FALSE)'), 'failedCount'],
+          [sequelize.literal(`COALESCE(jsonb_array_length("AppUser"."active_packages"), 0)`), 'packageCount'],
+        ],
+      },
     });
     res.json({ items: rows, total: count, page, pageSize });
   } catch (err) {

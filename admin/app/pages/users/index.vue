@@ -28,7 +28,7 @@ watch(
 
 const page = ref(1)
 const pageSize = ref(20)
-const sort = ref<'lastSeenAt' | 'loginCount' | 'firstSeenAt'>('lastSeenAt')
+const sort = ref<'lastSeenAt' | 'loginCount' | 'firstSeenAt' | 'dataRemainMb'>('lastSeenAt')
 
 const { data, pending, error, refresh } = await useAsyncData(
   'users',
@@ -41,11 +41,12 @@ const { data, pending, error, refresh } = await useAsyncData(
 
 const headers = [
   { title: 'User', key: 'name', sortable: false },
-  { title: 'Phone', key: 'msisdn', sortable: false },
-  { title: 'Device', key: 'device', sortable: false },
+  { title: 'Phone number', key: 'msisdn', sortable: false },
+  { title: 'Data left', key: 'data', sortable: false },
+  { title: 'Actions', key: 'actions', sortable: false, align: 'end' as const },
   { title: 'Logins', key: 'loginCount', sortable: false, align: 'end' as const },
   { title: 'Last active', key: 'lastSeenAt', sortable: false },
-  { title: 'First seen', key: 'firstSeenAt', sortable: false },
+  { title: 'Device', key: 'device', sortable: false },
 ]
 
 const refreshSoon = debounce(() => refresh(), 2000)
@@ -83,6 +84,7 @@ function onOptions(o: { page: number; itemsPerPage: number }) {
             { title: 'Last active', value: 'lastSeenAt' },
             { title: 'Most logins', value: 'loginCount' },
             { title: 'Newest', value: 'firstSeenAt' },
+            { title: 'Least data left', value: 'dataRemainMb' },
           ]"
           label="Sort by"
           hide-details
@@ -113,7 +115,18 @@ function onOptions(o: { page: number; itemsPerPage: number }) {
           </div>
         </template>
         <template #item.msisdn="{ item }">
-          <span class="text-mono">{{ formatPhone(item.msisdn) }}</span>
+          <span class="text-mono font-weight-bold" style="font-size: 0.95rem">{{ formatPhone(item.msisdn) }}</span>
+        </template>
+        <template #item.data="{ item }">
+          <template v-if="item.packagesUpdatedAt">
+            <div class="font-weight-bold" :class="(item.dataRemainMb ?? 0) < 500 ? 'text-error' : ''">{{ formatMb(item.dataRemainMb) }}</div>
+            <div class="text-caption text-medium-emphasis">{{ item.packageCount }} package{{ item.packageCount === 1 ? '' : 's' }}</div>
+          </template>
+          <span v-else class="text-medium-emphasis">—</span>
+        </template>
+        <template #item.actions="{ item }">
+          <div class="font-weight-bold">{{ (item.actionCount ?? 0).toLocaleString() }}</div>
+          <div v-if="item.failedCount" class="text-caption text-error font-weight-bold">{{ item.failedCount }} failed</div>
         </template>
         <template #item.device="{ item }">
           <div class="d-flex align-center ga-1">

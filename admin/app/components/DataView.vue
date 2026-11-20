@@ -8,6 +8,30 @@
 const props = withDefaults(defineProps<{ value: unknown; depth?: number }>(), { depth: 0 })
 
 type Obj = Record<string, unknown>
+/**
+ * Row text like "('TP PK 25','prepaid','25','11 GB','25000','7 Days'),(…)" → rows.
+ * (Older events kept this as text; it may end with "… (6642 chars)".)
+ */
+const TUPLE_COLUMNS: Record<string, string[]> = {
+  packageUssdData: ['Package', 'SimType', 'PackageCode', 'Data', 'Price', 'Duration'],
+}
+function parseTuples(text: string, key = ''): { rows: Obj[]; shortenedFrom: number | null } | null {
+  let t = text.trim()
+  // Older events: "…,('TP POS CV2 100000k 35G… (6642 chars)" → keep only the complete rows.
+  const cut = t.match(/… \((\d+) chars\)$/)
+  if (cut) t = t.slice(0, cut.index).replace(/,?\s*\([^()]*$/, '')
+  if (!t.startsWith('(') || !/\)\s*,\s*\(/.test(t)) return null
+  const names = TUPLE_COLUMNS[key]
+  const rows: Obj[] = []
+  for (const m of t.matchAll(/\(((?:'(?:[^']|'')*'|[^()'])*)\)/g)) {
+    const fields = [...m[1]!.matchAll(/'((?:[^']|'')*)'|([^,\s][^,]*)/g)].map((f) => (f[1] ?? f[2] ?? '').replace(/''/g, "'").trim())
+    const row: Obj = {}
+    fields.forEach((f, i) => (row[names?.[i] ?? `Col ${i + 1}`] = /^\d+(\.\d+)?$/.test(f) ? Number(f) : f))
+    rows.push(row)
+  }
+  return rows.length ? { rows, shortenedFrom: cut ? Number(cut[1]) : null } : null
+}
+
 const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v)
 const isScalar = (v: unknown) => v === null || ['string', 'number', 'boolean'].includes(typeof v)
 
@@ -49,7 +73,7 @@ const tone = (key: string, v: unknown) => {
 
 // For lists of objects: the union of keys, most useful columns first.
 const PRIORITY = [
-  /^(package)?name$|^counter ?name$|^title$/i,
+  /^(package)?name$|^package$|^counter ?name$|^title$/i,
   /code$/i,
   /price|amount|balance|total/i,
   /^net$|data|remain|used/i,
@@ -75,8 +99,16 @@ const parts = computed(() => {
   if (!isObj(v)) return null
   const fields: [string, unknown][] = []
   const nested: [string, unknown][] = []
-  for (const [k, val] of Object.entries(v)) (isScalar(val) ? fields : nested).push([k, val])
-  return { fields, nested }
+  const notes: string[] = []
+  for (const [k, val] of Object.entries(v)) {
+    const parsed = typeof val === 'string' ? parseTuples(val, k) : null
+    if (parsed) {
+      nested.push([k, parsed.rows])
+      if (parsed.shortenedFrom)
+        notes.push(`Only the first ${parsed.rows.length} rows of "${label(k)}" were recorded (older app version). Restart the app to record the full list.`)
+    } else (isScalar(val) ? fields : nested).push([k, val])
+  }
+  return { fields, nested, notes }
 })
 </script>
 
@@ -113,6 +145,9 @@ const parts = computed(() => {
         <div class="dv-label">{{ label(k) }}</div>
         <div class="dv-value" :class="tone(k, v)">{{ show(k, v) }}</div>
       </div>
+    </div>
+    <div v-for="n in parts.notes" :key="n" class="dv-note">
+      <v-icon icon="mdi-information-outline" size="16" /> {{ n }}
     </div>
     <div v-for="[k, v] in parts.nested" :key="k" class="dv-section">
       <div class="dv-section-title">
@@ -165,6 +200,17 @@ td.money {
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+.dv-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  color: rgba(var(--v-theme-on-surface), 0.7);
+  background: rgba(47, 128, 237, 0.08);
 }
 .dv-section {
   margin-top: 14px;
