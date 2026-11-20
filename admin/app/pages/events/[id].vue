@@ -62,6 +62,15 @@ const techItems = computed<TechItem[]>(() => {
   return items
 })
 
+// What was sent, without the extra { body: … } wrapper when that's all there is.
+const sentValue = computed(() => {
+  const r = p.value.request as Record<string, unknown> | undefined
+  if (r && Object.keys(r).length === 1 && 'body' in r) return r.body
+  return r
+})
+
+// Sent / Received: readable tables by default, raw JSON on request.
+const view = ref<{ sent: 'table' | 'json'; received: 'table' | 'json' }>({ sent: 'table', received: 'table' })
 const copied = ref('')
 async function copy(label: string, v: unknown) {
   try {
@@ -186,32 +195,54 @@ useHead(() => ({ title: e.value ? `${eventTitle(e.value)} · MyTPlus Activity` :
 
       <!-- sent / received side by side -->
       <v-row v-if="hasPayload" class="mt-1">
-        <v-col v-if="p.request" cols="12" :lg="p.response ? 6 : 12">
+        <v-col v-if="p.request" cols="12">
           <v-card class="bordered h-100">
             <v-card-item prepend-icon="mdi-upload-outline">
               <v-card-title class="font-weight-bold">Sent</v-card-title>
               <v-card-subtitle>What the user asked for</v-card-subtitle>
               <template #append>
+                <div class="view-toggle">
+                  <button type="button" :class="{ on: view.sent === 'table' }" @click="view.sent = 'table'">
+                    <v-icon icon="mdi-table" size="16" /> Table
+                  </button>
+                  <button type="button" :class="{ on: view.sent === 'json' }" @click="view.sent = 'json'">
+                    <v-icon icon="mdi-code-json" size="16" /> JSON
+                  </button>
+                </div>
                 <v-btn size="small" variant="text" class="text-none" :prepend-icon="copied === 'sent' ? 'mdi-check' : 'mdi-content-copy'" @click="copy('sent', p.request)">
                   {{ copied === 'sent' ? 'Copied' : 'Copy' }}
                 </v-btn>
               </template>
             </v-card-item>
-            <v-card-text><pre class="json">{{ pretty(p.request) }}</pre></v-card-text>
+            <v-card-text>
+              <DataView v-if="view.sent === 'table'" :value="sentValue" />
+              <pre v-else class="json">{{ pretty(p.request) }}</pre>
+            </v-card-text>
           </v-card>
         </v-col>
-        <v-col v-if="p.response" cols="12" :lg="p.request ? 6 : 12">
+        <v-col v-if="p.response" cols="12">
           <v-card class="bordered h-100">
             <v-card-item prepend-icon="mdi-download-outline">
               <v-card-title class="font-weight-bold">Received</v-card-title>
               <v-card-subtitle>What they got back</v-card-subtitle>
               <template #append>
+                <div class="view-toggle">
+                  <button type="button" :class="{ on: view.received === 'table' }" @click="view.received = 'table'">
+                    <v-icon icon="mdi-table" size="16" /> Table
+                  </button>
+                  <button type="button" :class="{ on: view.received === 'json' }" @click="view.received = 'json'">
+                    <v-icon icon="mdi-code-json" size="16" /> JSON
+                  </button>
+                </div>
                 <v-btn size="small" variant="text" class="text-none" :prepend-icon="copied === 'received' ? 'mdi-check' : 'mdi-content-copy'" @click="copy('received', p.response)">
                   {{ copied === 'received' ? 'Copied' : 'Copy' }}
                 </v-btn>
               </template>
             </v-card-item>
-            <v-card-text><pre class="json">{{ pretty(p.response) }}</pre></v-card-text>
+            <v-card-text>
+              <DataView v-if="view.received === 'table'" :value="p.response" />
+              <pre v-else class="json">{{ pretty(p.response) }}</pre>
+            </v-card-text>
           </v-card>
         </v-col>
       </v-row>
@@ -233,6 +264,30 @@ useHead(() => ({ title: e.value ? `${eventTitle(e.value)} · MyTPlus Activity` :
 </template>
 
 <style scoped>
+.view-toggle {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  margin-right: 6px;
+  border-radius: 10px;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+}
+.view-toggle button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: rgba(var(--v-theme-on-surface), 0.65);
+  cursor: pointer;
+}
+.view-toggle button.on {
+  background: rgb(var(--v-theme-surface));
+  color: rgb(var(--v-theme-on-surface));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
 .back-btn {
   box-shadow: 0 1px 2px rgba(17, 24, 39, 0.06), inset 0 0 0 1px rgba(17, 24, 39, 0.08);
 }
