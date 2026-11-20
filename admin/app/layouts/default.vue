@@ -36,11 +36,12 @@ const nav = computed(() => [
   { title: 'Packages', icon: 'mdi-package-variant', activeIcon: 'mdi-package-variant-closed', to: '/packages' },
   { title: 'Reports', icon: 'mdi-file-chart-outline', activeIcon: 'mdi-file-chart', to: '/reports' },
 ])
-const adminNav = computed(() =>
-  admin.value?.role === 'admin'
+const adminNav = computed(() => [
+  { title: 'Log storage', icon: 'mdi-delete-clock-outline', activeIcon: 'mdi-delete-clock', to: '/settings' },
+  ...(admin.value?.role === 'admin'
     ? [{ title: 'Admin accounts', icon: 'mdi-shield-account-outline', activeIcon: 'mdi-shield-account', to: '/accounts' }]
-    : [],
-)
+    : []),
+])
 const isActive = (to: string) => (to === '/' ? route.path === '/' : route.path.startsWith(to))
 
 const displayName = computed(() => admin.value?.displayName || admin.value?.username || '')

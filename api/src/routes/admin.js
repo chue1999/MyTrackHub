@@ -7,6 +7,7 @@ import { sequelize } from '../db.js';
 import { Admin, AppUser, Event, EVENT_TYPES } from '../models/index.js';
 import { requireAdmin, signAdminToken } from '../middleware/auth.js';
 import { createTicket, liveClientCount, streamHandler } from '../live.js';
+import { countOlderThan, cutoffFor, getRetention, RETENTION_MONTHS, runRetention, saveRetention } from '../retention.js';
 
 const router = Router();
 
@@ -662,6 +663,55 @@ router.get('/events/:id', async (req, res, next) => {
     });
     if (!event) return res.status(404).json({ message: 'Action not found' });
     res.json(event);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ── settings: auto delete old logs ───────────────────────────────────
+
+async function retentionInfo(settings, previewMonths) {
+  const s = settings ?? (await getRetention());
+  const months = previewMonths ?? s.months;
+  const cutoff = cutoffFor(months);
+  const [total, oldest, willDelete] = await Promise.all([
+    Event.count(),
+    Event.min('occurredAt'),
+    countOlderThan(cutoff),
+  ]);
+  return { ...s, monthOptions: RETENTION_MONTHS, preview: { months, cutoff, willDelete }, total, oldest: oldest ?? null };
+}
+
+router.get('/settings/retention', async (req, res, next) => {
+  try {
+    const m = Number(req.query.months);
+    res.json(await retentionInfo(null, RETENTION_MONTHS.includes(m) ? m : undefined));
+  } catch (err) {
+    next(err);
+  }
+});
+
+const retentionSchema = z.object({
+  enabled: z.boolean(),
+  months: z.number().int().refine((m) => RETENTION_MONTHS.includes(m), 'Choose one of the listed periods'),
+});
+
+router.put('/settings/retention', requireRoleAdmin, async (req, res, next) => {
+  try {
+    const data = retentionSchema.parse(req.body);
+    const saved = await saveRetention({ ...data, updatedAt: new Date().toISOString(), updatedBy: req.me.username });
+    // Apply the new setting straight away instead of waiting for the next hourly run.
+    const run = data.enabled ? await runRetention({ by: req.me.username }) : null;
+    res.json(await retentionInfo(run?.settings ?? saved));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/settings/retention/run', requireRoleAdmin, async (req, res, next) => {
+  try {
+    const run = await runRetention({ force: true, by: req.me.username });
+    res.json(await retentionInfo(run.settings));
   } catch (err) {
     next(err);
   }

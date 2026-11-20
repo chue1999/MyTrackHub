@@ -29,6 +29,4 @@ export const config = {
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '12h',
   adminUsername: process.env.ADMIN_USERNAME || 'admin',
   adminPassword: process.env.ADMIN_PASSWORD || '',
-
-  retentionDays: Number(process.env.RETENTION_DAYS || 0),
 };

@@ -92,3 +92,13 @@ export const Admin = sequelize.define(
 
 AppUser.hasMany(Event, { foreignKey: 'userId', as: 'events', onDelete: 'SET NULL' });
 Event.belongsTo(AppUser, { foreignKey: 'userId', as: 'user' });
+
+/** Small key → JSON store for settings changed from the admin website. */
+export const Setting = sequelize.define(
+  'Setting',
+  {
+    key: { type: DataTypes.STRING(60), primaryKey: true },
+    value: { type: DataTypes.JSONB, allowNull: false, defaultValue: {} },
+  },
+  { tableName: 'settings', underscored: true },
+);

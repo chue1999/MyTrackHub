@@ -2,11 +2,11 @@ import bcrypt from 'bcryptjs';
 import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
-import { Op } from 'sequelize';
 import { ZodError } from 'zod';
 import { config } from './config.js';
 import { ensureDatabase, sequelize } from './db.js';
-import { Admin, Event } from './models/index.js';
+import { Admin } from './models/index.js';
+import { scheduleRetention } from './retention.js';
 import adminRoutes from './routes/admin.js';
 import trackRoutes from './routes/track.js';
 
@@ -60,17 +60,6 @@ async function createFirstAdmin() {
     displayName: 'Administrator',
   });
   console.log(`Created admin account "${config.adminUsername}"`);
-}
-
-function scheduleRetention() {
-  if (!config.retentionDays) return;
-  const run = async () => {
-    const cutoff = new Date(Date.now() - config.retentionDays * 86_400_000);
-    const deleted = await Event.destroy({ where: { occurredAt: { [Op.lt]: cutoff } } });
-    if (deleted) console.log(`Retention: deleted ${deleted} events older than ${config.retentionDays} days`);
-  };
-  run().catch(console.error);
-  setInterval(() => run().catch(console.error), 24 * 60 * 60 * 1000).unref();
 }
 
 async function start() {
