@@ -217,3 +217,36 @@ export function apiSummaryLine(e: Ev) {
   if (get('To')) return [get('From'), '→', get('To'), get('Amount') && `· ${get('Amount')}`].filter(Boolean).join(' ')
   return r.filter((x) => x.strong).map((x) => `${x.label}: ${x.value}`).join(' · ')
 }
+
+const ACTION_LABELS: Record<string, string> = {
+  app_started: 'Started the app',
+  app_opened: 'Came back to the app',
+}
+
+/** Human title for any event: "Logged in", "Transfer balance", "Opened HomeScreen"… */
+export function eventTitle(e: { type: string; name: string }) {
+  switch (e.type) {
+    case 'api':
+      return apiLabel(e.name)
+    case 'login':
+      return 'Logged in'
+    case 'logout':
+      return 'Logged out'
+    case 'screen_view':
+      return screenLabel(e.name)
+    case 'action':
+      return ACTION_LABELS[e.name] ?? e.name
+    default:
+      return e.name
+  }
+}
+
+/** "/mainLayout/services/transfer/requestTransfer" → "requestTransfer"; class names stay as they are. */
+export function screenLabel(name: string) {
+  if (!name.includes('/')) return name
+  return name.split('/').filter(Boolean).pop() ?? name
+}
+
+export function formatDateLong(value: string) {
+  return new Date(value).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+}

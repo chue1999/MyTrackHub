@@ -8,9 +8,11 @@ const e = computed(() => props.event)
 const p = computed(() => (e.value?.properties ?? {}) as Record<string, any>)
 const isApi = computed(() => e.value?.type === 'api')
 const summary = computed(() => (e.value && isApi.value ? apiSummary(e.value) : []))
-const title = computed(() =>
-  !e.value ? '' : isApi.value ? apiLabel(e.value.name) : `${EVENT_META[e.value.type]?.label} · ${e.value.name}`,
-)
+const title = computed(() => (e.value ? eventTitle(e.value) : ''))
+const delaySec = computed(() => {
+  if (!e.value?.createdAt) return null
+  return Math.round((new Date(e.value.createdAt).getTime() - new Date(e.value.occurredAt).getTime()) / 1000)
+})
 const status = computed(() => {
   if (!e.value || e.value.success == null) return null
   return e.value.success
@@ -41,13 +43,24 @@ const otherProps = computed(() =>
         <div class="flex-grow-1" style="min-width: 0">
           <div class="text-h6 font-weight-black text-truncate">{{ title }}</div>
           <div class="text-body-2" style="opacity: 0.9">
-            {{ status?.text ?? EVENT_META[e.type]?.label }} · {{ formatDay(e.occurredAt) }} {{ formatTime(e.occurredAt) }}
+            {{ status?.text ?? EVENT_META[e.type]?.label }}
           </div>
         </div>
         <v-btn icon="mdi-close" variant="text" @click="model = false" />
       </div>
 
       <v-card-text class="pa-5">
+        <!-- when -->
+        <div class="when mb-4">
+          <v-icon icon="mdi-clock-outline" size="28" class="text-medium-emphasis" />
+          <div class="flex-grow-1">
+            <div class="text-caption text-medium-emphasis">Time</div>
+            <div class="text-h5 font-weight-black text-mono">{{ formatTime(e.occurredAt) }}</div>
+            <div class="text-body-2">{{ formatDateLong(e.occurredAt) }}</div>
+          </div>
+          <v-chip variant="tonal" size="small" prepend-icon="mdi-history">{{ timeAgo(e.occurredAt) }}</v-chip>
+        </div>
+
         <!-- server message -->
         <v-alert
           v-if="e.result"
@@ -92,13 +105,27 @@ const otherProps = computed(() =>
         <div class="text-subtitle-2 font-weight-bold mb-2">Details</div>
         <v-table density="compact" class="mb-4 bordered rounded-lg">
           <tbody>
-            <tr v-if="isApi"><td class="text-medium-emphasis" style="width: 160px">API</td><td class="text-mono">{{ e.name }}</td></tr>
+            <tr>
+              <td class="text-medium-emphasis" style="width: 160px">Date &amp; time</td>
+              <td>{{ formatDateLong(e.occurredAt) }}, <span class="text-mono">{{ formatTime(e.occurredAt) }}</span></td>
+            </tr>
+            <tr v-if="e.createdAt">
+              <td class="text-medium-emphasis">Received by server</td>
+              <td>
+                <span class="text-mono">{{ formatTime(e.createdAt) }}</span>
+                <span v-if="delaySec != null && delaySec > 5" class="text-caption text-medium-emphasis">
+                  ({{ delaySec }} s later, the phone was probably offline)
+                </span>
+              </td>
+            </tr>
+            <tr v-if="isApi"><td class="text-medium-emphasis">API</td><td class="text-mono">{{ e.name }}</td></tr>
             <tr v-if="p.host"><td class="text-medium-emphasis">Server</td><td class="text-mono">{{ p.host }}</td></tr>
             <tr v-if="p.status"><td class="text-medium-emphasis">HTTP status</td><td>{{ p.status }}</td></tr>
             <tr v-if="p.resultCode != null"><td class="text-medium-emphasis">Result code</td><td>{{ p.resultCode }}</td></tr>
             <tr v-if="p.ms != null"><td class="text-medium-emphasis">Time taken</td><td>{{ p.ms }} ms</td></tr>
             <tr v-if="p.error"><td class="text-medium-emphasis">Error</td><td>{{ p.error }}</td></tr>
-            <tr v-if="e.screen"><td class="text-medium-emphasis">Screen</td><td>{{ e.screen }}</td></tr>
+            <tr v-if="e.screen"><td class="text-medium-emphasis">Screen</td><td class="text-mono text-body-2">{{ e.screen }}</td></tr>
+            <tr v-if="!isApi && e.type !== 'login' && e.type !== 'logout'"><td class="text-medium-emphasis">Name</td><td class="text-mono text-body-2">{{ e.name }}</td></tr>
             <tr v-for="[k, v] in isApi ? [] : otherProps" :key="k">
               <td class="text-medium-emphasis">{{ k }}</td><td class="text-mono">{{ typeof v === 'object' ? JSON.stringify(v) : v }}</td>
             </tr>
@@ -125,6 +152,14 @@ const otherProps = computed(() =>
 </template>
 
 <style scoped>
+.when {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(var(--v-theme-on-surface), 0.04);
+}
 .json {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;

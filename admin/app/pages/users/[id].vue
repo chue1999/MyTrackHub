@@ -18,17 +18,17 @@ const { data: detail, error, refresh: refreshDetail } = await useAsyncData(`user
 
 const type = ref<string | null>(null)
 const page = ref(1)
-const pageSize = 50
+const pageSize = ref(50)
 const { data: events, pending } = await useAsyncData(
   `user-events-${id.value}`,
   () =>
     api<Paged<TrackedEvent>>('/events', {
-      query: { userId: id.value, type: type.value || undefined, page: page.value, pageSize },
+      query: { userId: id.value, type: type.value || undefined, page: page.value, pageSize: pageSize.value },
     }),
-  { watch: [type, page] },
+  { watch: [type, page, pageSize] },
 )
 watch(type, () => (page.value = 1))
-const pages = computed(() => Math.max(1, Math.ceil((events.value?.total ?? 0) / pageSize)))
+
 
 // ── edit user ──
 const { admin: me } = useAuth()
@@ -198,13 +198,13 @@ useLive().onEvents(({ user, events: incoming }) => {
                 />
               </template>
             </v-card-item>
-            <v-card-text>
-              <v-progress-linear v-if="pending" indeterminate color="primary" class="mb-2" />
-              <EventTimeline :events="events?.items ?? []" />
-              <div v-if="pages > 1" class="d-flex justify-center">
-                <v-pagination v-model="page" :length="pages" :total-visible="7" density="comfortable" rounded="lg" />
-              </div>
-            </v-card-text>
+            <EventTable
+              v-model:page="page"
+              v-model:page-size="pageSize"
+              :items="events?.items ?? []"
+              :total="events?.total ?? 0"
+              :loading="pending"
+            />
           </v-card>
         </v-col>
       </v-row>

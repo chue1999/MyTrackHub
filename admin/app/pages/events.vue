@@ -19,7 +19,7 @@ const result = ref<'true' | 'false' | null>(null)
 const from = ref('')
 const to = ref('')
 const page = ref(1)
-const pageSize = 50
+const pageSize = ref(50)
 
 const { data, pending, error, refresh } = await useAsyncData(
   'events',
@@ -32,13 +32,13 @@ const { data, pending, error, refresh } = await useAsyncData(
         from: from.value ? new Date(`${from.value}T00:00:00`).toISOString() : undefined,
         to: to.value ? new Date(`${to.value}T23:59:59`).toISOString() : undefined,
         page: page.value,
-        pageSize,
+        pageSize: pageSize.value,
       },
     }),
-  { watch: [debounced, type, result, from, to, page] },
+  { watch: [debounced, type, result, from, to, page, pageSize] },
 )
 watch([type, result, from, to], () => (page.value = 1))
-const pages = computed(() => Math.max(1, Math.ceil((data.value?.total ?? 0) / pageSize)))
+
 
 const missed = ref(0)
 watch([debounced, type, result, from, to, page], () => (missed.value = 0))
@@ -53,7 +53,7 @@ useLive().onEvents(({ events }) => {
   // Replace the object: Nuxt 4 async data is shallow-reactive.
   data.value = {
     ...data.value,
-    items: [...fresh, ...data.value.items].slice(0, pageSize),
+    items: [...fresh, ...data.value.items].slice(0, pageSize.value),
     total: data.value.total + fresh.length,
   }
 })
@@ -113,7 +113,7 @@ function showMissed() {
         </div>
       </v-card-text>
       <v-divider />
-      <v-card-text>
+      <v-card-text v-if="missed || error" class="pb-0">
         <v-alert
           v-if="missed"
           type="info"
@@ -128,12 +128,15 @@ function showMissed() {
           </template>
         </v-alert>
         <v-alert v-if="error" type="error" variant="tonal" class="mb-4" :text="error.data?.message || 'Could not load activity'" />
-        <v-progress-linear v-if="pending" indeterminate color="primary" class="mb-2" />
-        <EventTimeline :events="data?.items ?? []" show-user />
-        <div v-if="pages > 1" class="d-flex justify-center">
-          <v-pagination v-model="page" :length="pages" :total-visible="7" density="comfortable" rounded="lg" />
-        </div>
       </v-card-text>
+      <EventTable
+        v-model:page="page"
+        v-model:page-size="pageSize"
+        :items="data?.items ?? []"
+        :total="data?.total ?? 0"
+        :loading="pending"
+        show-user
+      />
     </v-card>
   </div>
 </template>

@@ -55,5 +55,6 @@ export interface TrackedEvent {
   appVersion: string | null
   deviceModel: string | null
   occurredAt: string
+  createdAt?: string
   user?: Pick<AppUser, 'id' | 'msisdn' | 'firstName' | 'lastName'> | null
 }

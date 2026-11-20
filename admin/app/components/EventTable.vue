@@ -1,0 +1,164 @@
+<script setup lang="ts">
+import type { TrackedEvent } from '~/composables/useApi'
+
+const props = defineProps<{
+  items: TrackedEvent[]
+  total: number
+  loading?: boolean
+  showUser?: boolean
+}>()
+const page = defineModel<number>('page', { default: 1 })
+const pageSize = defineModel<number>('pageSize', { default: 50 })
+
+const headers = computed(() => [
+  { title: 'Time', key: 'occurredAt', sortable: false, width: 150 },
+  ...(props.showUser ? [{ title: 'User', key: 'user', sortable: false, width: 210 }] : []),
+  { title: 'What they did', key: 'action', sortable: false },
+  { title: 'Details', key: 'details', sortable: false },
+  { title: 'Result', key: 'success', sortable: false, width: 110, align: 'center' as const },
+  { title: '', key: 'open', sortable: false, width: 44 },
+])
+
+const selected = ref<TrackedEvent | null>(null)
+const dialog = ref(false)
+function open(e: TrackedEvent) {
+  selected.value = e
+  dialog.value = true
+}
+
+const iconColor = (e: TrackedEvent) =>
+  e.type === 'api' ? (e.success === false ? 'error' : e.success ? 'success' : 'purple') : EVENT_META[e.type]?.color
+const p = (e: TrackedEvent) => e.properties as Record<string, any>
+</script>
+
+<template>
+  <div>
+    <v-data-table-server
+      v-model:page="page"
+      v-model:items-per-page="pageSize"
+      :headers="headers"
+      :items="items"
+      :items-length="total"
+      :loading="loading"
+      :items-per-page-options="[25, 50, 100, 200]"
+      item-value="id"
+      hover
+      density="comfortable"
+      class="event-table"
+      @click:row="(_: unknown, { item }: { item: TrackedEvent }) => open(item)"
+    >
+      <!-- time -->
+      <template #item.occurredAt="{ item }">
+        <div class="py-2">
+          <div class="text-body-2 font-weight-bold text-mono">{{ formatTime(item.occurredAt) }}</div>
+          <div class="text-caption text-medium-emphasis">
+            {{ new Date(item.occurredAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) }}
+          </div>
+        </div>
+      </template>
+
+      <!-- user -->
+      <template #item.user="{ item }">
+        <NuxtLink v-if="item.user" :to="`/users/${item.user.id}`" class="d-flex align-center ga-2 text-decoration-none user-link" @click.stop>
+          <v-avatar color="primary" variant="tonal" size="32">
+            <span class="text-caption font-weight-bold">{{ initials(item.user) }}</span>
+          </v-avatar>
+          <div style="min-width: 0">
+            <div class="text-body-2 font-weight-medium text-truncate">{{ fullName(item.user) }}</div>
+            <div class="text-caption text-medium-emphasis text-mono">{{ formatPhone(item.user.msisdn) }}</div>
+          </div>
+        </NuxtLink>
+        <span v-else class="text-caption text-medium-emphasis">Not logged in</span>
+      </template>
+
+      <!-- action -->
+      <template #item.action="{ item }">
+        <div class="d-flex align-center ga-3 py-2">
+          <v-avatar :color="iconColor(item)" variant="tonal" rounded="lg" size="34">
+            <v-icon :icon="EVENT_META[item.type]?.icon" size="18" />
+          </v-avatar>
+          <div style="min-width: 0">
+            <div class="text-body-2 font-weight-bold">{{ eventTitle(item) }}</div>
+            <div class="text-caption text-medium-emphasis text-truncate" style="max-width: 280px">
+              {{ EVENT_META[item.type]?.label }}<template v-if="item.screen && item.type !== 'screen_view'"> · {{ screenLabel(item.screen) }}</template>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- details -->
+      <template #item.details="{ item }">
+        <div class="py-2">
+          <div v-if="item.type === 'api' && apiSummaryLine(item)" class="summary">{{ apiSummaryLine(item) }}</div>
+          <div
+            v-if="item.result"
+            class="text-body-2 text-truncate"
+            style="max-width: 360px"
+            :class="item.success === false ? 'text-error' : 'text-medium-emphasis'"
+          >
+            {{ item.result }}
+          </div>
+          <div v-if="item.type === 'api'" class="text-caption text-medium-emphasis text-mono">
+            {{ item.name.split(' ')[0] }} {{ screenLabel(item.name.split(' ')[1] ?? '') }}
+            <template v-if="p(item).ms != null"> · {{ p(item).ms }} ms</template>
+          </div>
+          <div v-else-if="item.type === 'screen_view' && item.name.includes('/')" class="text-caption text-medium-emphasis text-mono text-truncate" style="max-width: 360px">
+            {{ item.name }}
+          </div>
+        </div>
+      </template>
+
+      <!-- result -->
+      <template #item.success="{ item }">
+        <v-chip
+          v-if="item.success !== null && item.success !== undefined"
+          size="small"
+          :color="item.success ? 'success' : 'error'"
+          variant="flat"
+          :prepend-icon="item.success ? 'mdi-check' : 'mdi-close'"
+        >
+          {{ item.success ? 'Success' : 'Failed' }}
+        </v-chip>
+        <span v-else class="text-medium-emphasis">—</span>
+      </template>
+
+      <template #item.open>
+        <v-icon icon="mdi-chevron-right" class="text-medium-emphasis" />
+      </template>
+
+      <template #no-data>
+        <div class="py-10 text-medium-emphasis">
+          <v-icon icon="mdi-timeline-clock-outline" size="40" class="mb-2" />
+          <div>No activity found</div>
+        </div>
+      </template>
+    </v-data-table-server>
+
+    <EventDetailDialog v-model="dialog" :event="selected" />
+  </div>
+</template>
+
+<style scoped>
+.event-table :deep(tbody tr) {
+  cursor: pointer;
+}
+.event-table :deep(thead th) {
+  font-weight: 700 !important;
+  text-transform: uppercase;
+  font-size: 0.72rem !important;
+  letter-spacing: 0.04em;
+  color: rgba(var(--v-theme-on-surface), 0.6) !important;
+}
+.summary {
+  display: inline-block;
+  font-weight: 700;
+  font-size: 0.875rem;
+  padding: 2px 8px;
+  margin-bottom: 2px;
+  border-radius: 6px;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+}
+.user-link {
+  color: inherit;
+}
+</style>
