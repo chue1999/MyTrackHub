@@ -12,7 +12,7 @@ const api = useApi()
 const route = useRoute()
 const id = computed(() => String(route.params.id))
 
-const { data: detail, error } = await useAsyncData(`user-${id.value}`, () =>
+const { data: detail, error, refresh: refreshDetail } = await useAsyncData(`user-${id.value}`, () =>
   api<UserDetail>(`/users/${id.value}`),
 )
 
@@ -29,6 +29,23 @@ const { data: events, pending } = await useAsyncData(
 )
 watch(type, () => (page.value = 1))
 const pages = computed(() => Math.max(1, Math.ceil((events.value?.total ?? 0) / pageSize)))
+
+const refreshDetailSoon = debounce(() => refreshDetail(), 1500)
+useLive().onEvents(({ user, events: incoming }) => {
+  if (user?.id !== id.value) return
+  if (detail.value) detail.value = { ...detail.value, user: { ...detail.value.user, ...user } }
+  const mine = incoming.filter((e) => !type.value || e.type === type.value)
+  if (events.value && page.value === 1 && mine.length) {
+    const known = new Set(events.value.items.map((e) => e.id))
+    const fresh = mine.filter((e) => !known.has(e.id)).reverse()
+    events.value = {
+      ...events.value,
+      items: [...fresh, ...events.value.items],
+      total: events.value.total + fresh.length,
+    }
+  }
+  refreshDetailSoon()
+})
 </script>
 
 <template>

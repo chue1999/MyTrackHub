@@ -21,7 +21,7 @@ const page = ref(1)
 const pageSize = ref(20)
 const sort = ref<'lastSeenAt' | 'loginCount' | 'firstSeenAt'>('lastSeenAt')
 
-const { data, pending, error } = await useAsyncData(
+const { data, pending, error, refresh } = await useAsyncData(
   'users',
   () =>
     api<Paged<AppUser>>('/users', {
@@ -38,6 +38,9 @@ const headers = [
   { title: 'Last active', key: 'lastSeenAt', sortable: false },
   { title: 'First seen', key: 'firstSeenAt', sortable: false },
 ]
+
+const refreshSoon = debounce(() => refresh(), 2000)
+useLive().onEvents(() => refreshSoon())
 
 function onOptions(o: { page: number; itemsPerPage: number }) {
   page.value = o.page

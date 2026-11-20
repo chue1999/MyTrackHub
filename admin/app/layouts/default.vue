@@ -2,6 +2,8 @@
 import { useDisplay, useTheme } from 'vuetify'
 
 const { admin, logout } = useAuth()
+const live = useLive()
+onMounted(() => live.connect())
 const { mdAndUp } = useDisplay()
 const theme = useTheme()
 const drawer = ref<boolean | null>(null)
@@ -46,6 +48,21 @@ function toggleTheme() {
   <v-app-bar flat border="b" density="comfortable">
     <v-app-bar-nav-icon v-if="!mdAndUp" @click="drawer = !drawer" />
     <v-spacer />
+    <v-chip
+      :color="live.connected.value ? 'success' : 'grey'"
+      variant="tonal"
+      size="small"
+      class="mr-2"
+      :title="live.connected.value ? 'Updates appear instantly' : 'Reconnecting…'"
+    >
+      <v-icon
+        icon="mdi-circle"
+        size="10"
+        start
+        :class="{ 'live-dot': live.connected.value }"
+      />
+      {{ live.connected.value ? 'Live' : 'Offline' }}
+    </v-chip>
     <v-btn :icon="isDark ? 'mdi-weather-sunny' : 'mdi-weather-night'" variant="text" @click="toggleTheme" />
     <v-menu>
       <template #activator="{ props }">
@@ -65,3 +82,13 @@ function toggleTheme() {
     </v-container>
   </v-main>
 </template>
+
+<style scoped>
+.live-dot {
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+</style>

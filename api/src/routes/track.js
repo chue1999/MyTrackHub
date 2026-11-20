@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { sequelize } from '../db.js';
 import { AppUser, Event, EVENT_TYPES } from '../models/index.js';
 import { requireAppKey } from '../middleware/auth.js';
+import { broadcast } from '../live.js';
 import { normalizeMsisdn, sanitizeProperties } from '../utils/sanitize.js';
 
 const router = Router();
@@ -91,11 +92,21 @@ router.post('/', limiter, requireAppKey, async (req, res, next) => {
         ip: req.ip,
         occurredAt: when(e.occurredAt),
       }));
-      await Event.bulkCreate(rows, { transaction });
-      return rows.length;
+      const created = await Event.bulkCreate(rows, { transaction, returning: true });
+      return { created, user };
     });
 
-    res.status(202).json({ accepted: result });
+    res.status(202).json({ accepted: result.created.length });
+
+    // Push to the admin website right away.
+    const u = result.user;
+    const userInfo = u
+      ? { id: u.id, msisdn: u.msisdn, firstName: u.firstName, lastName: u.lastName }
+      : null;
+    broadcast('events', {
+      user: u ? u.toJSON() : null,
+      events: result.created.map((e) => ({ ...e.toJSON(), id: String(e.id), user: userInfo })),
+    });
   } catch (err) {
     next(err);
   }

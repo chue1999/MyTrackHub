@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { TrackedEvent } from '~/composables/useApi'
+
 interface Overview {
   totals: { totalUsers: number; newUsersToday: number; activeToday: number; eventsToday: number; loginsToday: number }
   daily: { date: string; activeUsers: number; events: number; logins: number }[]
@@ -18,6 +20,27 @@ const metric = ref<'activeUsers' | 'logins' | 'events'>('activeUsers')
 const series = computed(() => data.value?.daily.map((d) => d[metric.value]) ?? [])
 const labels = computed(() => data.value?.daily.map((d) => d.date.slice(5)) ?? [])
 const maxOf = (rows: { count: number }[]) => Math.max(1, ...rows.map((r) => r.count))
+
+// ── live ──
+const live = useLive()
+const feed = ref<TrackedEvent[]>([])
+const refreshSoon = debounce(() => refresh(), 1500)
+live.onEvents(({ events }) => {
+  feed.value = [...[...events].reverse(), ...feed.value].slice(0, 12)
+  if (data.value) {
+    // Bump the "today" counters instantly; the full refresh follows shortly.
+    const t = data.value.totals
+    data.value = {
+      ...data.value,
+      totals: {
+        ...t,
+        eventsToday: t.eventsToday + events.length,
+        loginsToday: t.loginsToday + events.filter((e) => e.type === 'login').length,
+      },
+    }
+  }
+  refreshSoon()
+})
 </script>
 
 <template>
@@ -84,6 +107,36 @@ const maxOf = (rows: { count: number }[]) => Math.max(1, ...rows.map((r) => r.co
         </v-card-text>
       </v-card>
 
+      <v-card class="bordered mt-4">
+        <v-card-item prepend-icon="mdi-broadcast">
+          <v-card-title class="font-weight-bold">Live activity</v-card-title>
+          <v-card-subtitle>
+            {{ live.connected.value ? 'New actions appear here the moment they happen' : 'Reconnecting…' }}
+          </v-card-subtitle>
+        </v-card-item>
+        <v-card-text>
+          <transition-group name="feed" tag="div">
+            <div v-for="e in feed" :key="e.id" class="d-flex align-center ga-3 py-2 feed-row">
+              <v-avatar :color="EVENT_META[e.type]?.color" size="30" variant="tonal">
+                <v-icon :icon="EVENT_META[e.type]?.icon" size="16" />
+              </v-avatar>
+              <div class="flex-grow-1 text-body-2" style="min-width: 0">
+                <NuxtLink v-if="e.user" :to="`/users/${e.user.id}`" class="font-weight-bold text-decoration-none">
+                  {{ fullName(e.user) }}
+                </NuxtLink>
+                <span v-else class="text-medium-emphasis">Guest</span>
+                <span class="text-medium-emphasis"> · {{ EVENT_META[e.type]?.label.toLowerCase() }} </span>
+                <span class="font-weight-medium">{{ e.name }}</span>
+              </div>
+              <span class="text-caption text-medium-emphasis text-mono">{{ formatTime(e.occurredAt) }}</span>
+            </div>
+          </transition-group>
+          <div v-if="!feed.length" class="text-medium-emphasis text-center py-4">
+            Waiting for activity…
+          </div>
+        </v-card-text>
+      </v-card>
+
       <v-row class="mt-2">
         <v-col v-for="block in [
           { title: 'Most opened screens', icon: 'mdi-cellphone-screenshot', rows: data.topScreens, color: 'info' },
@@ -117,3 +170,9 @@ const maxOf = (rows: { count: number }[]) => Math.max(1, ...rows.map((r) => r.co
     </div>
   </div>
 </template>
+
+<style scoped>
+.feed-enter-active { transition: all 0.4s ease; }
+.feed-enter-from { opacity: 0; transform: translateY(-8px); background: rgba(245, 184, 0, 0.2); }
+.feed-row + .feed-row { border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity)); }
+</style>

@@ -37,6 +37,28 @@ const { data, pending, error, refresh } = await useAsyncData(
 )
 watch([type, from, to], () => (page.value = 1))
 const pages = computed(() => Math.max(1, Math.ceil((data.value?.total ?? 0) / pageSize)))
+
+const missed = ref(0)
+watch([debounced, type, from, to, page], () => (missed.value = 0))
+useLive().onEvents(({ events }) => {
+  const filtered = !!(debounced.value || type.value || from.value || to.value)
+  if (!data.value || page.value !== 1 || filtered) {
+    missed.value += events.length
+    return
+  }
+  const known = new Set(data.value.items.map((e) => e.id))
+  const fresh = events.filter((e) => !known.has(e.id)).reverse()
+  // Replace the object: Nuxt 4 async data is shallow-reactive.
+  data.value = {
+    ...data.value,
+    items: [...fresh, ...data.value.items].slice(0, pageSize),
+    total: data.value.total + fresh.length,
+  }
+})
+function showMissed() {
+  missed.value = 0
+  refresh()
+}
 </script>
 
 <template>
@@ -78,6 +100,19 @@ const pages = computed(() => Math.max(1, Math.ceil((data.value?.total ?? 0) / pa
       </v-card-text>
       <v-divider />
       <v-card-text>
+        <v-alert
+          v-if="missed"
+          type="info"
+          variant="tonal"
+          density="compact"
+          class="mb-4"
+          icon="mdi-bell-ring-outline"
+        >
+          {{ missed }} new action{{ missed > 1 ? 's' : '' }} since you opened this view
+          <template #append>
+            <v-btn size="small" variant="text" @click="showMissed">Show</v-btn>
+          </template>
+        </v-alert>
         <v-alert v-if="error" type="error" variant="tonal" class="mb-4" :text="error.data?.message || 'Could not load activity'" />
         <v-progress-linear v-if="pending" indeterminate color="primary" class="mb-2" />
         <EventTimeline :events="data?.items ?? []" show-user />

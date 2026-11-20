@@ -21,6 +21,7 @@ export function useAuth() {
   }
 
   function logout() {
+    disconnectLive()
     token.value = null
     admin.value = null
     return navigateTo('/login')

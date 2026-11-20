@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { sequelize } from '../db.js';
 import { Admin, AppUser, Event, EVENT_TYPES } from '../models/index.js';
 import { requireAdmin, signAdminToken } from '../middleware/auth.js';
+import { createTicket, liveClientCount, streamHandler } from '../live.js';
 
 const router = Router();
 
@@ -53,7 +54,15 @@ router.post('/auth/login', loginLimiter, async (req, res, next) => {
   }
 });
 
+// Real-time stream (authenticated by a one-time ticket, see live.js).
+router.get('/stream', streamHandler);
+
 router.use(requireAdmin);
+
+/** POST /stream/ticket — one-time ticket for opening the live stream. */
+router.post('/stream/ticket', (req, res) => {
+  res.json({ ticket: createTicket(req.admin.sub), viewers: liveClientCount() });
+});
 
 router.get('/auth/me', async (req, res) => {
   const admin = await Admin.findByPk(req.admin.sub, {
