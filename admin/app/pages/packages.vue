@@ -229,7 +229,7 @@ const purchaseHeaders = [
           </template>
           <template #item.buyer="{ item }">
             <div class="font-weight-medium">{{ item.userId ? fullName(item) : 'Unknown' }}</div>
-            <div class="text-caption text-medium-emphasis text-mono">
+            <div class="text-caption text-medium-emphasis text-mono phone">
               {{ formatPhone(item.msisdn) }}
               <template v-if="item.forWhom === 'other' && item.forNumber"> → for {{ formatPhone(String(item.forNumber).replace(/^0/, '')) }}</template>
             </div>
@@ -272,7 +272,7 @@ const purchaseHeaders = [
             </v-avatar>
             <div class="flex-grow-1" style="min-width: 0">
               <div class="font-weight-bold text-truncate">{{ fullName(u) }}</div>
-              <div class="text-caption text-medium-emphasis text-mono">{{ formatPhone(u.msisdn) }} · {{ u.packages }} package{{ u.packages === 1 ? '' : 's' }}</div>
+              <div class="text-caption text-medium-emphasis text-mono phone">{{ formatPhone(u.msisdn) }} · {{ u.packages }} package{{ u.packages === 1 ? '' : 's' }}</div>
             </div>
             <div class="text-right">
               <div class="font-weight-black" :class="(u.remainMb ?? 0) < 500 ? 'text-error' : ''">{{ formatMb(u.remainMb) }} left</div>

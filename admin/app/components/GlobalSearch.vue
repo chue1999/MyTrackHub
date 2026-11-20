@@ -128,7 +128,7 @@ const showPanel = computed(() => open.value && q.value.trim().length >= 2)
             </v-avatar>
             <div class="flex-grow-1" style="min-width: 0">
               <div class="row-title text-truncate">{{ fullName(u) }}</div>
-              <div class="row-sub text-mono">{{ formatPhone(u.msisdn) }}</div>
+              <div class="row-sub text-mono phone">{{ formatPhone(u.msisdn) }}</div>
             </div>
             <span class="row-meta">{{ timeAgo(u.lastSeenAt) }}</span>
           </a>

@@ -15,8 +15,9 @@ export default defineNuxtConfig({
         { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' },
         {
           rel: 'stylesheet',
-          // Inter for Latin text, Noto Sans Lao so Lao customer names render well.
-          href: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Noto+Sans+Lao:wght@400;500;600;700;800&display=swap',
+          // Phetsarath for Lao text on computers without Phetsarath OT installed
+          // (English uses Times New Roman, which every computer has).
+          href: 'https://fonts.googleapis.com/css2?family=Phetsarath:wght@400;700&display=swap',
         },
       ],
     },

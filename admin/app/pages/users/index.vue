@@ -126,7 +126,7 @@ function onOptions(o: { page: number; itemsPerPage: number }) {
           </div>
         </template>
         <template #item.msisdn="{ item }">
-          <span class="text-mono font-weight-bold" style="font-size: 0.95rem">{{ formatPhone(item.msisdn) }}</span>
+          <span class="text-mono font-weight-bold phone" style="font-size: 0.95rem">{{ formatPhone(item.msisdn) }}</span>
         </template>
         <template #item.data="{ item }">
           <template v-if="item.packagesUpdatedAt">

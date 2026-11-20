@@ -67,7 +67,7 @@ const p = (e: TrackedEvent) => e.properties as Record<string, any>
           </v-avatar>
           <div style="min-width: 0">
             <div class="text-body-2 font-weight-medium text-truncate">{{ fullName(item.user) }}</div>
-            <div class="text-caption text-medium-emphasis text-mono">{{ formatPhone(item.user.msisdn) }}</div>
+            <div class="text-caption text-medium-emphasis text-mono phone">{{ formatPhone(item.user.msisdn) }}</div>
           </div>
         </NuxtLink>
         <span v-else class="text-caption text-medium-emphasis">Not logged in</span>

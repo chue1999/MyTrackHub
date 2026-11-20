@@ -4,7 +4,10 @@ html {
 
 /* ── Typography ── */
 :root {
-  --app-font: 'Inter', 'Noto Sans Lao', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* English (and numbers): Times New Roman. Lao: Phetsarath OT (installed),
+     or Phetsarath from Google Fonts. Times has no Lao letters, so the browser
+     takes every Lao character from Phetsarath automatically. */
+  --app-font: 'Times New Roman', Times, 'Phetsarath OT', 'Phetsarath', serif;
 }
 .v-application,
 .v-application [class*='text-'],
@@ -12,7 +15,7 @@ html {
 .v-application input,
 .v-application textarea {
   font-family: var(--app-font) !important;
-  letter-spacing: -0.005em;
+  letter-spacing: 0;
 }
 .v-application .v-btn {
   letter-spacing: 0;
@@ -57,8 +60,21 @@ html {
 
 .v-application .text-mono,
 .text-mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
+  font-family: var(--app-font) !important;
+  font-variant-numeric: tabular-nums;
   letter-spacing: 0;
+}
+
+/* Phone numbers: always on one line, digits evenly spaced. */
+.v-application .phone,
+.phone {
+  white-space: nowrap !important;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em !important;
+  font-weight: 600;
+}
+body {
+  font-family: var(--app-font);
 }
 
 /* ── Chart colours (validated reference palette; light and dark stepped separately) ── */

@@ -151,7 +151,7 @@ useLive().onEvents(({ user, events: incoming }) => {
                 <span class="text-h5 font-weight-bold text-black">{{ initials(detail.user) }}</span>
               </v-avatar>
               <div class="text-h6 font-weight-bold">{{ fullName(detail.user) }}</div>
-              <div class="text-body-1 text-mono text-medium-emphasis">{{ formatPhone(detail.user.msisdn) }}</div>
+              <div class="text-body-1 text-mono text-medium-emphasis phone">{{ formatPhone(detail.user.msisdn) }}</div>
               <v-btn
                 v-if="me?.role === 'admin'"
                 size="small"
@@ -352,7 +352,7 @@ useLive().onEvents(({ user, events: incoming }) => {
         <v-card rounded="xl">
           <v-card-item prepend-icon="mdi-account-edit-outline">
             <v-card-title class="font-weight-bold">Edit user</v-card-title>
-            <v-card-subtitle class="text-mono">{{ formatPhone(detail.user.msisdn) }}</v-card-subtitle>
+            <v-card-subtitle class="text-mono phone">{{ formatPhone(detail.user.msisdn) }}</v-card-subtitle>
           </v-card-item>
           <v-card-text>
             <v-text-field v-model="editForm.firstName" label="First name" />

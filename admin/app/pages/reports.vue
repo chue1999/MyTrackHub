@@ -361,7 +361,7 @@ const pct = computed(() => (progress.value.total ? Math.round((progress.value.lo
   font-variant-numeric: tabular-nums;
 }
 .preview .mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--app-font);
 }
 .preview .ok {
   color: #1d8a4a;

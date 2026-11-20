@@ -68,6 +68,7 @@ function show(key: string, v: unknown): string {
 const tone = (key: string, v: unknown) => {
   if (/result ?desc|message|status/i.test(key) && typeof v === 'string') return 'strong'
   if (MONEY.test(key)) return 'money'
+  if (PHONE.test(key) && /^\+?\d{8,13}$/.test(String(v ?? ''))) return 'phone'
   return ''
 }
 

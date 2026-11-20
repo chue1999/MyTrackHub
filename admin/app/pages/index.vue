@@ -402,14 +402,14 @@ live.onEvents(({ events }) => {
           <template #item.from="{ item }">
             <NuxtLink v-if="item.userId" :to="`/users/${item.userId}`" class="text-decoration-none" style="color: inherit">
               <div class="font-weight-medium">{{ fullName(item) }}</div>
-              <div class="text-caption text-medium-emphasis text-mono">{{ formatPhone(item.msisdn) }}</div>
+              <div class="text-caption text-medium-emphasis text-mono phone">{{ formatPhone(item.msisdn) }}</div>
             </NuxtLink>
             <span v-else class="text-medium-emphasis">Unknown</span>
           </template>
           <template #item.receiver="{ item }">
             <div class="d-flex align-center ga-2">
               <v-icon icon="mdi-arrow-right-bold" size="16" class="text-medium-emphasis" />
-              <span class="text-body-1 font-weight-bold text-mono">{{ receiver(item) }}</span>
+              <span class="text-body-1 font-weight-bold text-mono phone">{{ receiver(item) }}</span>
             </div>
           </template>
           <template #item.amount="{ item }">

@@ -157,7 +157,7 @@ useHead(() => ({ title: e.value ? `${eventTitle(e.value)} · MyTPlus Activity` :
             </v-avatar>
             <div class="flex-grow-1" style="min-width: 0">
               <div class="key-name text-truncate">{{ e.user ? fullName(e.user) : 'Not logged in' }}</div>
-              <div class="key-sub text-mono">{{ formatPhone(e.user?.msisdn ?? e.msisdn) }}</div>
+              <div class="key-sub text-mono phone">{{ formatPhone(e.user?.msisdn ?? e.msisdn) }}</div>
             </div>
           </div>
           <v-btn v-if="e.user" :to="`/users/${e.user.id}`" variant="tonal" size="small" rounded="lg" class="text-none mt-3" append-icon="mdi-arrow-right">
@@ -517,11 +517,11 @@ useHead(() => ({ title: e.value ? `${eventTitle(e.value)} · MyTPlus Activity` :
   font-weight: 700;
   word-break: break-word;
 }
-.tech-value.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.tech-value.mono { font-family: var(--app-font); }
 .tech-value.small { font-size: 0.95rem; }
 
 .json {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--app-font);
   font-size: 12.5px;
   line-height: 1.5;
   max-height: 460px;
