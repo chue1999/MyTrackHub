@@ -3,8 +3,10 @@ import type { Paged, TrackedEvent } from '~/composables/useApi'
 
 const api = useApi()
 
-const search = ref('')
-const debounced = ref('')
+// A link can open this page pre-filtered, e.g. /events?search=TransferBalance
+const initialSearch = String(useRoute().query.search || '')
+const search = ref(initialSearch)
+const debounced = ref(initialSearch.trim())
 let timer: ReturnType<typeof setTimeout> | undefined
 watch(search, (v) => {
   clearTimeout(timer)

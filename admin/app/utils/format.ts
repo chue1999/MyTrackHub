@@ -250,3 +250,14 @@ export function screenLabel(name: string) {
 export function formatDateLong(value: string) {
   return new Date(value).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 }
+
+/** Each event type always gets the same colour (colour follows the entity, never its rank). */
+export const TYPE_COLOR: Record<string, string> = {
+  screen_view: 'var(--series-1)',
+  api: 'var(--series-2)',
+  tap: 'var(--series-3)',
+  action: 'var(--series-4)',
+  login: 'var(--series-5)',
+  logout: 'var(--series-6)',
+  error: 'var(--series-7)',
+}

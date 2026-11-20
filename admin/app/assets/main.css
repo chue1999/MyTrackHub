@@ -9,3 +9,37 @@ html {
 .text-mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
+
+/* ── Chart colours (validated reference palette; light and dark stepped separately) ── */
+.v-theme--light {
+  --chart-surface: #ffffff;
+  --chart-grid: #e8e7e3;
+  --chart-text: #0b0b0b;
+  --chart-text-2: #52514e;
+  --series-1: #2a78d6; /* blue */
+  --series-2: #eb6834; /* orange */
+  --series-3: #1baf7a; /* aqua */
+  --series-4: #eda100; /* yellow */
+  --series-5: #e87ba4; /* magenta */
+  --series-6: #008300; /* green */
+  --series-7: #6250d6; /* violet */
+  --status-good: #0ca30c;
+  --status-critical: #d03b3b;
+  --status-unknown: #b5b4ae;
+}
+.v-theme--dark {
+  --chart-surface: #1e1e1e;
+  --chart-grid: #34342f;
+  --chart-text: #f0efec;
+  --chart-text-2: #c3c2b7;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #0ca30c;
+  --series-7: #9085e9;
+  --status-good: #0ca30c;
+  --status-critical: #d03b3b;
+  --status-unknown: #6b6a64;
+}

@@ -221,6 +221,7 @@ router.get('/stats/overview', async (req, res, next) => {
     const topApis = await sequelize.query(
       `SELECT name, COUNT(*)::int AS count, COUNT(DISTINCT user_id)::int AS users,
               ROUND(AVG((properties->>'ms')::numeric))::int AS "avgMs",
+              COUNT(*) FILTER (WHERE success IS TRUE)::int AS succeeded,
               COUNT(*) FILTER (WHERE success IS FALSE)::int AS failed
          FROM events
         WHERE type = 'api' AND occurred_at >= :since
@@ -230,8 +231,51 @@ router.get('/stats/overview', async (req, res, next) => {
       { replacements: { since }, type: QueryTypes.SELECT },
     );
 
+    // What users do, by type (pie chart).
+    const byType = await sequelize.query(
+      `SELECT type, COUNT(*)::int AS count FROM events
+        WHERE occurred_at >= :since GROUP BY type ORDER BY count DESC`,
+      { replacements: { since }, type: QueryTypes.SELECT },
+    );
+
+    // API results (pie chart).
+    const [apiResults] = await sequelize.query(
+      `SELECT COUNT(*) FILTER (WHERE success IS TRUE)::int AS success,
+              COUNT(*) FILTER (WHERE success IS FALSE)::int AS failed,
+              COUNT(*) FILTER (WHERE success IS NULL)::int AS unknown
+         FROM events WHERE type = 'api' AND occurred_at >= :since`,
+      { replacements: { since }, type: QueryTypes.SELECT },
+    );
+
+    // Money transfers: receiver and amount come from the recorded request.
+    const amountSql = `NULLIF(regexp_replace(e.properties->'request'->'body'->>'TransferAmount', '[^0-9.]', '', 'g'), '')::numeric`;
+    const [transfersToday] = await sequelize.query(
+      `SELECT COUNT(*)::int AS count,
+              COUNT(*) FILTER (WHERE e.success IS TRUE)::int AS succeeded,
+              COUNT(*) FILTER (WHERE e.success IS FALSE)::int AS failed,
+              COALESCE(SUM(${amountSql}) FILTER (WHERE e.success IS TRUE), 0)::float AS amount
+         FROM events e
+        WHERE e.type = 'api' AND e.name LIKE '%/TransferBalance' AND e.occurred_at >= :today`,
+      { replacements: { today: startOfToday }, type: QueryTypes.SELECT },
+    );
+    const recentTransfers = await sequelize.query(
+      `SELECT e.id::text AS id, e.occurred_at AS "occurredAt", e.success, e.result,
+              e.properties->'request'->'body'->>'Receiver' AS receiver,
+              ${amountSql}::float AS amount,
+              u.id AS "userId", u.msisdn, u.first_name AS "firstName", u.last_name AS "lastName"
+         FROM events e LEFT JOIN app_users u ON u.id = e.user_id
+        WHERE e.type = 'api' AND e.name LIKE '%/TransferBalance' AND e.occurred_at >= :since
+        ORDER BY e.occurred_at DESC
+        LIMIT 10`,
+      { replacements: { since }, type: QueryTypes.SELECT },
+    );
+
     res.json({
       totals: { totalUsers, newUsersToday, activeToday, eventsToday, loginsToday, failedToday },
+      byType,
+      apiResults,
+      transfersToday,
+      recentTransfers,
       daily,
       topScreens,
       topTaps,
