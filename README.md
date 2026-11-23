@@ -28,7 +28,7 @@ npm run dev                 # http://localhost:4000
 
 # 2. Admin website (second terminal)
 cd admin
-cp .env.example .env        # NUXT_PUBLIC_API_BASE=http://localhost:4000
+cp .env.example .env        # leave NUXT_PUBLIC_API_BASE empty (dev proxy → :4000)
 npm install
 npm run dev                 # http://localhost:3000
 ```
@@ -197,8 +197,10 @@ whatever folder they are in.
 | `npm run lint` / `format` | ESLint / Prettier                                  |
 | `npm run check`           | Lint + format check + typecheck                    |
 
-Production: set `NUXT_PUBLIC_API_BASE` to the API's public **https** URL and
-add the website's URL to `CORS_ORIGINS` in `api/.env`.
+Production: `npm run generate` and let nginx serve `.output/public` and pass
+`/api/` to the API on the same address — see `deploy/nginx-mytrackhub.conf`.
+No `NUXT_PUBLIC_API_BASE` or CORS needed. (Only when the API is on another
+site: set `NUXT_PUBLIC_API_BASE` to it and add the website to `CORS_ORIGINS`.)
 
 ---
 

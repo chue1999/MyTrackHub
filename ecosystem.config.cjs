@@ -1,3 +1,10 @@
+// pm2 on the server: only the API runs as a process.
+// The admin website is static files (`npm run generate` → admin/.output/public)
+// served by nginx, see deploy/nginx-mytrackhub.conf.
+//
+//   pm2 start ecosystem.config.cjs && pm2 save
+//
+// The API reads api/.env.production (NODE_ENV=production): SQL Server settings etc.
 module.exports = {
   apps: [
     {
@@ -8,21 +15,6 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: '4000',
-      },
-      autorestart: true,
-      watch: false,
-      max_restarts: 10,
-    },
-    {
-      name: 'mytrackhub-admin',
-      cwd: '/var/www/MyTrackHub/admin',
-      script: 'node_modules/nuxi/bin/nuxi.mjs',
-      args: 'preview --port 3000 --host 127.0.0.1',
-      interpreter: 'node',
-      env: {
-        NODE_ENV: 'production',
-        NITRO_PORT: '3000',
-        NITRO_HOST: '127.0.0.1',
       },
       autorestart: true,
       watch: false,

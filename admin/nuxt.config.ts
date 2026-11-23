@@ -32,8 +32,17 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     public: {
-      // Override with NUXT_PUBLIC_API_BASE=https://your-api.example.com
-      apiBase: 'http://localhost:4000',
+      // Empty = the API is on the same site as this website (/api/v1/…):
+      // nginx forwards /api/ to the API in production, the dev proxy below in development.
+      // Only set NUXT_PUBLIC_API_BASE=https://api.example.com when the API is on another site.
+      apiBase: '',
+    },
+  },
+
+  // `npm run dev`: /api/… → the API on port 4000 (same as nginx in production).
+  nitro: {
+    devProxy: {
+      '/api': { target: 'http://localhost:4000/api', changeOrigin: true },
     },
   },
 
