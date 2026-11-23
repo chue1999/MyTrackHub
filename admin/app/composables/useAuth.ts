@@ -14,13 +14,16 @@ export function useAuth() {
     })
     token.value = res.token
     admin.value = res.admin
+    // A new sign-in starts the 10-minute idle timer fresh (else an old time would log out at once).
+    resetIdleTimer()
   }
 
-  function logout() {
+  /** `reason: 'idle'` shows a "signed out after 10 minutes" note on the login page. */
+  function logout(reason?: 'idle') {
     disconnectLive()
     token.value = null
     admin.value = null
-    return navigateTo('/login')
+    return navigateTo(reason === 'idle' ? '/login?reason=idle' : '/login')
   }
 
   return { token, admin, login, logout, isLoggedIn: computed(() => !!token.value) }

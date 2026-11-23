@@ -1,16 +1,24 @@
 import { Op, QueryTypes } from 'sequelize';
-import { sequelize } from '../db/index.js';
+import { isMssql, sequelize } from '../db/index.js';
 import { AppUser } from '../models/index.js';
 import { HttpError } from '../utils/http-error.js';
 import { isUuid, likePattern, period, phoneDigits } from '../utils/query.js';
+import { countIf, isFalse, jsonLength, limit, top } from '../utils/sql.js';
 
 /** People using the mobile app (the "Users" pages). */
 
+// Case-insensitive LIKE: ILIKE on PostgreSQL; SQL Server's collation already ignores case.
+const LIKE = isMssql ? Op.like : Op.iLike;
+
 const SORTS = Object.freeze({
-  lastSeenAt: ['lastSeenAt', 'DESC'],
-  loginCount: ['loginCount', 'DESC'],
-  firstSeenAt: ['firstSeenAt', 'DESC'],
-  dataRemainMb: ['dataRemainMb', 'ASC NULLS LAST'],
+  lastSeenAt: [['lastSeenAt', 'DESC']],
+  loginCount: [['loginCount', 'DESC']],
+  firstSeenAt: [['firstSeenAt', 'DESC']],
+  // Lowest data first; users without a snapshot last.
+  dataRemainMb: [
+    [sequelize.literal('CASE WHEN "AppUser"."data_remain_mb" IS NULL THEN 1 ELSE 0 END'), 'ASC'],
+    ['dataRemainMb', 'ASC'],
+  ],
 });
 
 /**
@@ -23,8 +31,8 @@ export async function listUsers(query, { page, pageSize, offset }) {
   if (search) {
     const digits = phoneDigits(search);
     where[Op.or] = [
-      { firstName: { [Op.iLike]: likePattern(search) } },
-      { lastName: { [Op.iLike]: likePattern(search) } },
+      { firstName: { [LIKE]: likePattern(search) } },
+      { lastName: { [LIKE]: likePattern(search) } },
       ...(digits ? [{ msisdn: { [Op.like]: likePattern(digits) } }] : []),
     ];
   }
@@ -40,23 +48,23 @@ export async function listUsers(query, { page, pageSize, offset }) {
 
   const { rows, count } = await AppUser.findAndCountAll({
     where,
-    order: [SORTS[query.sort] ?? SORTS.lastSeenAt],
+    order: SORTS[query.sort] ?? SORTS.lastSeenAt,
     limit: pageSize,
     offset,
     attributes: {
       exclude: ['activePackages'],
       include: [
         [
-          sequelize.literal(`(SELECT COUNT(*)::int FROM events e WHERE e.user_id = "AppUser"."id"${inRange})`),
+          sequelize.literal(`(SELECT CAST(COUNT(*) AS int) FROM events e WHERE e.user_id = "AppUser"."id"${inRange})`),
           'actionCount',
         ],
         [
           sequelize.literal(
-            `(SELECT COUNT(*)::int FROM events e WHERE e.user_id = "AppUser"."id" AND e.success IS FALSE${inRange})`,
+            `(SELECT CAST(COUNT(*) AS int) FROM events e WHERE e.user_id = "AppUser"."id" AND ${isFalse('e.success')}${inRange})`,
           ),
           'failedCount',
         ],
-        [sequelize.literal(`COALESCE(jsonb_array_length("AppUser"."active_packages"), 0)`), 'packageCount'],
+        [sequelize.literal(jsonLength('"AppUser"."active_packages"')), 'packageCount'],
       ],
     },
   });
@@ -75,25 +83,26 @@ export async function getUserDetail(id) {
   const replacements = { id: user.id };
   const [[summary], topScreens, devices] = await Promise.all([
     sequelize.query(
-      `SELECT COUNT(*)::int AS "totalEvents",
-              COUNT(*) FILTER (WHERE type = 'screen_view')::int AS "screenViews",
-              COUNT(*) FILTER (WHERE type = 'tap')::int AS taps,
-              COUNT(*) FILTER (WHERE success IS FALSE)::int AS failed,
-              COUNT(DISTINCT session_id)::int AS sessions
+      `SELECT CAST(COUNT(*) AS int) AS "totalEvents",
+              ${countIf("type = 'screen_view'")} AS "screenViews",
+              ${countIf("type = 'tap'")} AS "taps",
+              ${countIf(isFalse('success'))} AS "failed",
+              CAST(COUNT(DISTINCT session_id) AS int) AS "sessions"
          FROM events WHERE user_id = :id`,
       { replacements, type: QueryTypes.SELECT },
     ),
     sequelize.query(
-      `SELECT name, COUNT(*)::int AS count FROM events
+      `SELECT ${top(5)} name AS "name", CAST(COUNT(*) AS int) AS "count" FROM events
         WHERE user_id = :id AND type = 'screen_view'
-        GROUP BY name ORDER BY count DESC LIMIT 5`,
+        GROUP BY name ORDER BY "count" DESC ${limit(5)}`,
       { replacements, type: QueryTypes.SELECT },
     ),
     sequelize.query(
-      `SELECT device_id AS "deviceId", device_model AS "deviceModel", platform, MAX(occurred_at) AS "lastUsedAt"
+      `SELECT ${top(10)} device_id AS "deviceId", device_model AS "deviceModel", platform AS "platform",
+              MAX(occurred_at) AS "lastUsedAt"
          FROM events WHERE user_id = :id AND device_id IS NOT NULL
         GROUP BY device_id, device_model, platform
-        ORDER BY "lastUsedAt" DESC LIMIT 10`,
+        ORDER BY "lastUsedAt" DESC ${limit(10)}`,
       { replacements, type: QueryTypes.SELECT },
     ),
   ]);

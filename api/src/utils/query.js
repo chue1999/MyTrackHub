@@ -51,8 +51,14 @@ export function startOfToday() {
   return d;
 }
 
-/** "abc" → "%abc%" with LIKE wildcards in the input escaped. */
-export const likePattern = (value) => `%${String(value).replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
+/**
+ * "abc" → "%abc%" with LIKE wildcards in the input escaped:
+ * PostgreSQL uses \% \_ ; SQL Server uses [%] [_] [[].
+ */
+export const likePattern = (value, dialect = process.env.DB_DIALECT || 'postgres') =>
+  dialect === 'mssql'
+    ? `%${String(value).replace(/[%_[]/g, (c) => `[${c}]`)}%`
+    : `%${String(value).replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
 
 /** Digits of a phone search without the 856 / leading 0 prefix: "020 5555 1234" → "2055551234". */
 export const phoneDigits = (value) => String(value).replace(/\D/g, '').replace(/^856/, '').replace(/^0+/, '');

@@ -10,6 +10,7 @@ import accountRoutes from './account.routes.js';
 import authRoutes from './auth.routes.js';
 import eventRoutes from './event.routes.js';
 import settingsRoutes from './settings.routes.js';
+import sqlConsoleRoutes from './sql-console.routes.js';
 import statsRoutes from './stats.routes.js';
 import userRoutes from './user.routes.js';
 
@@ -30,5 +31,6 @@ router.use('/stats', statsRoutes);
 router.use('/users', userRoutes);
 router.use('/events', eventRoutes);
 router.use('/settings', settingsRoutes);
+router.use('/sql', sqlConsoleRoutes);
 
 export default router;

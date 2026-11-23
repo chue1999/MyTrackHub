@@ -1,5 +1,5 @@
 import { DataTypes } from 'sequelize';
-import { sequelize } from '../db/index.js';
+import { oneOf, sequelize } from '../db/index.js';
 
 /** Someone allowed to log in to the admin website. */
 export const Admin = sequelize.define(
@@ -10,7 +10,7 @@ export const Admin = sequelize.define(
     passwordHash: { type: DataTypes.STRING(100), allowNull: false },
     displayName: { type: DataTypes.STRING(100) },
     // admin = full access incl. managing accounts; viewer = read-only.
-    role: { type: DataTypes.ENUM('admin', 'viewer'), allowNull: false, defaultValue: 'admin' },
+    role: oneOf(['admin', 'viewer'], { allowNull: false, defaultValue: 'admin' }),
     isActive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
     lastLoginAt: { type: DataTypes.DATE },
   },

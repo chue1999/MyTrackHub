@@ -2,11 +2,30 @@ import { Op, QueryTypes } from 'sequelize';
 import { sequelize } from '../db/index.js';
 import { AppUser, Event } from '../models/index.js';
 import { isUuid, period, startOfToday } from '../utils/query.js';
+import {
+  countIf,
+  DAYS,
+  dayBuckets,
+  hasKey,
+  isFalse,
+  isTrue,
+  json,
+  jsonLength,
+  jsonRows,
+  lateral,
+  limit,
+  money,
+  sumIf,
+  toNumber,
+  top,
+} from '../utils/sql.js';
 
 /**
  * Read-only statistics for the Dashboard, Packages and App features pages.
- * Heavy lifting is done in SQL (PostgreSQL) so the API stays fast.
+ * Heavy lifting is done in SQL (PostgreSQL in dev, SQL Server in prod; see utils/sql.js).
  */
+
+const select = (sql, replacements = {}) => sequelize.query(sql, { replacements, type: QueryTypes.SELECT });
 
 /** Dashboard: headline numbers, daily chart, top screens/taps/APIs, transfers, failures. */
 export async function getOverview(query) {
@@ -26,89 +45,91 @@ export async function getOverview(query) {
     Event.count({ where: { success: false, occurredAt: { [Op.gte]: today } } }),
   ]);
 
-  const daily = await sequelize.query(
-    `SELECT to_char(d.day, 'YYYY-MM-DD') AS date,
-                COALESCE(COUNT(DISTINCT e.user_id), 0)::int AS "activeUsers",
-                COALESCE(COUNT(e.id), 0)::int AS events,
-                COALESCE(COUNT(e.id) FILTER (WHERE e.type = 'login'), 0)::int AS logins
-           FROM generate_series(:since::date, :until::date, interval '1 day') AS d(day)
-           LEFT JOIN events e ON e.occurred_at >= d.day AND e.occurred_at < d.day + interval '1 day'
-          GROUP BY d.day
-          ORDER BY d.day`,
-    { replacements: { since, until }, type: QueryTypes.SELECT },
+  const daily = await select(
+    `SELECT d.date AS "date",
+            CAST(COUNT(DISTINCT e.user_id) AS int) AS "activeUsers",
+            CAST(COUNT(e.id) AS int) AS "events",
+            ${countIf("e.type = 'login'")} AS "logins"
+       FROM ${DAYS}
+       LEFT JOIN events e ON e.occurred_at >= d.day_start AND e.occurred_at < d.day_end
+      GROUP BY d.date
+      ORDER BY d.date`,
+    { days: dayBuckets(since, until) },
   );
 
-  const top = (type) =>
-    sequelize.query(
-      `SELECT name, COUNT(*)::int AS count, COUNT(DISTINCT user_id)::int AS users
-             FROM events
-            WHERE type = :type AND occurred_at BETWEEN :since AND :until
-            GROUP BY name
-            ORDER BY count DESC
-            LIMIT 10`,
-      { replacements: { type, since, until }, type: QueryTypes.SELECT },
+  const topNames = (type) =>
+    select(
+      `SELECT ${top(10)} name AS "name", CAST(COUNT(*) AS int) AS "count", CAST(COUNT(DISTINCT user_id) AS int) AS "users"
+         FROM events
+        WHERE type = :type AND occurred_at BETWEEN :since AND :until
+        GROUP BY name
+        ORDER BY "count" DESC
+      ${limit(10)}`,
+      { type, since, until },
     );
-  const [topScreens, topTaps] = await Promise.all([top('screen_view'), top('tap')]);
-  const topApis = await sequelize.query(
-    `SELECT name, COUNT(*)::int AS count, COUNT(DISTINCT user_id)::int AS users,
-                ROUND(AVG((properties->>'ms')::numeric))::int AS "avgMs",
-                COUNT(*) FILTER (WHERE success IS TRUE)::int AS succeeded,
-                COUNT(*) FILTER (WHERE success IS FALSE)::int AS failed
-           FROM events
-          WHERE type = 'api' AND occurred_at BETWEEN :since AND :until
-          GROUP BY name
-          ORDER BY count DESC
-          LIMIT 10`,
-    { replacements: { since, until }, type: QueryTypes.SELECT },
+  const [topScreens, topTaps] = await Promise.all([topNames('screen_view'), topNames('tap')]);
+  const topApis = await select(
+    `SELECT ${top(10)} name AS "name", CAST(COUNT(*) AS int) AS "count", CAST(COUNT(DISTINCT user_id) AS int) AS "users",
+            CAST(ROUND(AVG(${toNumber(json('properties', 'ms'))}), 0) AS int) AS "avgMs",
+            ${countIf(isTrue('success'))} AS "succeeded",
+            ${countIf(isFalse('success'))} AS "failed"
+       FROM events
+      WHERE type = 'api' AND occurred_at BETWEEN :since AND :until
+      GROUP BY name
+      ORDER BY "count" DESC
+      ${limit(10)}`,
+    { since, until },
   );
 
   // What users do, by type (pie chart).
-  const byType = await sequelize.query(
-    `SELECT type, COUNT(*)::int AS count FROM events
-          WHERE occurred_at BETWEEN :since AND :until GROUP BY type ORDER BY count DESC`,
-    { replacements: { since, until }, type: QueryTypes.SELECT },
+  const byType = await select(
+    `SELECT type AS "type", CAST(COUNT(*) AS int) AS "count" FROM events
+      WHERE occurred_at BETWEEN :since AND :until GROUP BY type ORDER BY "count" DESC`,
+    { since, until },
   );
 
   // API results (pie chart).
-  const [apiResults] = await sequelize.query(
-    `SELECT COUNT(*) FILTER (WHERE success IS TRUE)::int AS success,
-                COUNT(*) FILTER (WHERE success IS FALSE)::int AS failed,
-                COUNT(*) FILTER (WHERE success IS NULL)::int AS unknown
-           FROM events WHERE type = 'api' AND occurred_at BETWEEN :since AND :until`,
-    { replacements: { since, until }, type: QueryTypes.SELECT },
+  const [apiResults] = await select(
+    `SELECT ${countIf(isTrue('success'))} AS "success",
+            ${countIf(isFalse('success'))} AS "failed",
+            ${countIf('success IS NULL')} AS "unknown"
+       FROM events WHERE type = 'api' AND occurred_at BETWEEN :since AND :until`,
+    { since, until },
   );
 
   // Money transfers: receiver and amount come from the recorded request.
-  const amountSql = `NULLIF(regexp_replace(e.properties->'request'->'body'->>'TransferAmount', '[^0-9.]', '', 'g'), '')::numeric`;
-  const [transfersToday] = await sequelize.query(
-    `SELECT COUNT(*)::int AS count,
-                COUNT(*) FILTER (WHERE e.success IS TRUE)::int AS succeeded,
-                COUNT(*) FILTER (WHERE e.success IS FALSE)::int AS failed,
-                COALESCE(SUM(${amountSql}) FILTER (WHERE e.success IS TRUE), 0)::float AS amount
-           FROM events e
-          WHERE e.type = 'api' AND e.name LIKE '%/TransferBalance' AND e.occurred_at >= :today`,
-    { replacements: { today }, type: QueryTypes.SELECT },
+  const amountSql = money(json('e.properties', 'request.body.TransferAmount'));
+  const [transfersToday] = await select(
+    `SELECT CAST(COUNT(*) AS int) AS "count",
+            ${countIf(isTrue('e.success'))} AS "succeeded",
+            ${countIf(isFalse('e.success'))} AS "failed",
+            CAST(${sumIf(isTrue('e.success'), amountSql)} AS float) AS "amount"
+       FROM events e
+      WHERE e.type = 'api' AND e.name LIKE '%/TransferBalance' AND e.occurred_at >= :today`,
+    { today },
   );
-  const recentTransfers = await sequelize.query(
-    `SELECT e.id::text AS id, e.occurred_at AS "occurredAt", e.success, e.result,
-                e.properties->'request'->'body'->>'Receiver' AS receiver,
-                ${amountSql}::float AS amount,
-                u.id AS "userId", u.msisdn, u.first_name AS "firstName", u.last_name AS "lastName"
-           FROM events e LEFT JOIN app_users u ON u.id = e.user_id
-          WHERE e.type = 'api' AND e.name LIKE '%/TransferBalance' AND e.occurred_at BETWEEN :since AND :until
-          ORDER BY e.occurred_at DESC
-          LIMIT 10`,
-    { replacements: { since, until }, type: QueryTypes.SELECT },
+  const recentTransfers = await select(
+    `SELECT ${top(10)} CAST(e.id AS varchar(20)) AS "id", e.occurred_at AS "occurredAt", e.success AS "success",
+            e.result AS "result", ${json('e.properties', 'request.body.Receiver')} AS "receiver",
+            CAST(${amountSql} AS float) AS "amount",
+            u.id AS "userId", u.msisdn AS "msisdn", u.first_name AS "firstName", u.last_name AS "lastName"
+       FROM events e LEFT JOIN app_users u ON u.id = e.user_id
+      WHERE e.type = 'api' AND e.name LIKE '%/TransferBalance' AND e.occurred_at BETWEEN :since AND :until
+      ORDER BY e.occurred_at DESC
+      ${limit(10)}`,
+    { since, until },
   );
 
   // Two kinds of logout: full (back to phone number) vs locked (back to password).
-  const [logouts] = await sequelize.query(
-    `SELECT COUNT(*) FILTER (WHERE name IN ('logout', 'logout_full'))::int AS full,
-                COUNT(*) FILTER (WHERE name = 'logout_to_password')::int AS "toPassword",
-                COUNT(*) FILTER (WHERE name IN ('logout', 'logout_full') AND occurred_at >= :today)::int AS "fullToday",
-                COUNT(*) FILTER (WHERE name = 'logout_to_password' AND occurred_at >= :today)::int AS "toPasswordToday"
-           FROM events WHERE type = 'logout' AND occurred_at BETWEEN :since AND :until`,
-    { replacements: { since, until, today }, type: QueryTypes.SELECT },
+  const full = "name IN ('logout', 'logout_full')";
+  const locked = "name = 'logout_to_password'";
+  const [logouts] = await select(
+    `SELECT ${countIf(full)} AS "full",
+            ${countIf(locked)} AS "toPassword",
+            ${countIf(`${full} AND occurred_at >= :today`)} AS "fullToday",
+            ${countIf(`${locked} AND occurred_at >= :today`)} AS "toPasswordToday"
+       FROM events WHERE type = 'logout' AND occurred_at BETWEEN :since AND :until`,
+    { since, until, today },
   );
 
   // API calls in the last 15 minutes from an app still running the old
@@ -118,7 +139,7 @@ export async function getOverview(query) {
       type: 'api',
       success: null,
       occurredAt: { [Op.gte]: new Date(Date.now() - 15 * 60_000) },
-      [Op.and]: sequelize.literal(`properties ? 'ok'`),
+      [Op.and]: sequelize.literal(hasKey('"Event"."properties"', 'ok')),
     },
   });
 
@@ -157,94 +178,97 @@ export async function getOverview(query) {
 export async function getPackageStats(query) {
   const { since, until, days } = period(query, 30);
   const today = startOfToday();
+  const pj = (path) => json('e.properties', path);
 
   // One row per purchase attempt, with the useful fields pulled out.
   const base = `
     WITH p AS (
       SELECT e.id, e.occurred_at, e.success, e.result, e.user_id,
-             COALESCE(e.properties->'purchase'->>'channel',
+             COALESCE(${pj('purchase.channel')},
                CASE WHEN e.name LIKE '%SpinerWheel%' THEN 'lucky_wheel'
                     WHEN e.name LIKE '%MMonney%' THEN 'mmoney'
                     WHEN e.name LIKE '%PackageIR%' THEN 'roaming'
                     ELSE 'balance' END) AS channel,
-             COALESCE(e.properties->'purchase'->>'code',
-                      e.properties->'request'->'body'->>'PackageCode',
-                      e.properties->'request'->'body'->>'pkCode') AS code,
-             e.properties->'purchase'->>'name' AS name,
-             e.properties->'purchase'->>'net' AS net,
-             e.properties->'purchase'->>'duration' AS duration,
-             e.properties->'purchase'->>'forWhom' AS for_whom,
-             e.properties->'purchase'->>'forNumber' AS for_number,
-             NULLIF(regexp_replace(COALESCE(e.properties->'purchase'->>'price', ''), '[^0-9.]', '', 'g'), '')::numeric AS price
+             COALESCE(${pj('purchase.code')}, ${pj('request.body.PackageCode')}, ${pj('request.body.pkCode')}) AS code,
+             ${pj('purchase.name')} AS name,
+             ${pj('purchase.net')} AS net,
+             ${pj('purchase.duration')} AS duration,
+             ${pj('purchase.forWhom')} AS for_whom,
+             ${pj('purchase.forNumber')} AS for_number,
+             ${money(pj('purchase.price'))} AS price
         FROM events e
        WHERE e.type = 'api' AND e.name LIKE '%RegisterPackage%' AND e.occurred_at BETWEEN :since AND :until
     )`;
-  const q = (sql, extra = {}) =>
-    sequelize.query(`${base} ${sql}`, { replacements: { since, until, today, ...extra }, type: QueryTypes.SELECT });
+  const q = (sql, extra = {}) => select(`${base} ${sql}`, { since, until, today, ...extra });
+  const ok = isTrue('success');
 
   const [[totals], [todayTotals], byChannel, topPackages, daily, recent] = await Promise.all([
-    q(`SELECT COUNT(*) FILTER (WHERE success IS TRUE)::int AS sold,
-              COUNT(*) FILTER (WHERE success IS FALSE)::int AS failed,
-              COUNT(*) FILTER (WHERE success IS NULL)::int AS unknown,
-              COALESCE(SUM(price) FILTER (WHERE success IS TRUE), 0)::float AS revenue,
-              COUNT(*) FILTER (WHERE success IS TRUE AND price IS NULL)::int AS "soldNoPrice",
-              COUNT(DISTINCT user_id) FILTER (WHERE success IS TRUE)::int AS buyers
+    q(`SELECT ${countIf(ok)} AS "sold",
+              ${countIf(isFalse('success'))} AS "failed",
+              ${countIf('success IS NULL')} AS "unknown",
+              CAST(${sumIf(ok, 'price')} AS float) AS "revenue",
+              ${countIf(`${ok} AND price IS NULL`)} AS "soldNoPrice",
+              CAST(COUNT(DISTINCT CASE WHEN ${ok} THEN user_id END) AS int) AS "buyers"
          FROM p`),
-    q(`SELECT COUNT(*) FILTER (WHERE success IS TRUE)::int AS sold,
-              COALESCE(SUM(price) FILTER (WHERE success IS TRUE), 0)::float AS revenue
+    q(`SELECT ${countIf(ok)} AS "sold", CAST(${sumIf(ok, 'price')} AS float) AS "revenue"
          FROM p WHERE occurred_at >= :today`),
-    q(`SELECT channel, COUNT(*) FILTER (WHERE success IS TRUE)::int AS sold,
-              COALESCE(SUM(price) FILTER (WHERE success IS TRUE), 0)::float AS revenue
-         FROM p GROUP BY channel ORDER BY sold DESC`),
-    q(`SELECT code, MAX(name) AS name, MAX(net) AS net, MAX(duration) AS duration,
-              MAX(price)::float AS price,
-              COUNT(*) FILTER (WHERE success IS TRUE)::int AS sold,
-              COUNT(*) FILTER (WHERE success IS FALSE)::int AS failed,
-              COALESCE(SUM(price) FILTER (WHERE success IS TRUE), 0)::float AS revenue
+    q(`SELECT channel AS "channel", ${countIf(ok)} AS "sold", CAST(${sumIf(ok, 'price')} AS float) AS "revenue"
+         FROM p GROUP BY channel ORDER BY "sold" DESC`),
+    q(`SELECT ${top(10)} code AS "code", MAX(name) AS "name", MAX(net) AS "net", MAX(duration) AS "duration",
+              CAST(MAX(price) AS float) AS "price",
+              ${countIf(ok)} AS "sold",
+              ${countIf(isFalse('success'))} AS "failed",
+              CAST(${sumIf(ok, 'price')} AS float) AS "revenue"
          FROM p WHERE code IS NOT NULL
-        GROUP BY code ORDER BY revenue DESC, sold DESC LIMIT 10`),
-    sequelize.query(
-      `${base}
-       SELECT to_char(d.day, 'YYYY-MM-DD') AS date,
-              COUNT(p.id) FILTER (WHERE p.success IS TRUE)::int AS sold,
-              COALESCE(SUM(p.price) FILTER (WHERE p.success IS TRUE), 0)::float AS revenue
-         FROM generate_series(:since::date, :until::date, interval '1 day') AS d(day)
-         LEFT JOIN p ON p.occurred_at >= d.day AND p.occurred_at < d.day + interval '1 day'
-        GROUP BY d.day ORDER BY d.day`,
-      { replacements: { since, until }, type: QueryTypes.SELECT },
+        GROUP BY code ORDER BY "revenue" DESC, "sold" DESC
+      ${limit(10)}`),
+    q(
+      `SELECT d.date AS "date",
+              ${countIf(isTrue('p.success'))} AS "sold",
+              CAST(${sumIf(isTrue('p.success'), 'p.price')} AS float) AS "revenue"
+         FROM ${DAYS}
+         LEFT JOIN p ON p.occurred_at >= d.day_start AND p.occurred_at < d.day_end
+        GROUP BY d.date ORDER BY d.date`,
+      { days: dayBuckets(since, until) },
     ),
-    q(`SELECT p.id::text AS id, p.occurred_at AS "occurredAt", p.success, p.result, p.channel, p.code,
-              p.name, p.net, p.duration, p.price::float AS price, p.for_whom AS "forWhom", p.for_number AS "forNumber",
-              u.id AS "userId", u.msisdn, u.first_name AS "firstName", u.last_name AS "lastName"
+    q(`SELECT ${top(15)} CAST(p.id AS varchar(20)) AS "id", p.occurred_at AS "occurredAt", p.success AS "success",
+              p.result AS "result", p.channel AS "channel", p.code AS "code", p.name AS "name", p.net AS "net",
+              p.duration AS "duration", CAST(p.price AS float) AS "price", p.for_whom AS "forWhom",
+              p.for_number AS "forNumber",
+              u.id AS "userId", u.msisdn AS "msisdn", u.first_name AS "firstName", u.last_name AS "lastName"
          FROM p LEFT JOIN app_users u ON u.id = p.user_id
-        ORDER BY p.occurred_at DESC LIMIT 15`),
+        ORDER BY p.occurred_at DESC
+      ${limit(15)}`),
   ]);
 
   // Data balance from each user's latest snapshot.
-  const [data] = await sequelize.query(
-    `SELECT COUNT(*) FILTER (WHERE jsonb_array_length(COALESCE(active_packages, '[]'::jsonb)) > 0)::int AS "usersWithPackages",
-            COALESCE(SUM(jsonb_array_length(COALESCE(active_packages, '[]'::jsonb))), 0)::int AS "activePackages",
-            COALESCE(SUM(data_remain_mb), 0)::float AS "remainMb",
-            COALESCE(SUM(data_used_mb), 0)::float AS "usedMb"
-       FROM app_users WHERE packages_updated_at IS NOT NULL`,
-    { type: QueryTypes.SELECT },
+  // (SQL Server can't SUM a subquery, so count each user's packages first.)
+  const [data] = await select(
+    `SELECT ${countIf('c.n > 0')} AS "usersWithPackages",
+            CAST(COALESCE(SUM(c.n), 0) AS int) AS "activePackages",
+            CAST(COALESCE(SUM(u.data_remain_mb), 0) AS float) AS "remainMb",
+            CAST(COALESCE(SUM(u.data_used_mb), 0) AS float) AS "usedMb"
+       FROM app_users u
+      ${lateral(`SELECT ${jsonLength('u.active_packages')} AS n`, 'c')}
+      WHERE u.packages_updated_at IS NOT NULL`,
   );
-  const inUse = await sequelize.query(
-    `SELECT pkg->>'name' AS name, COUNT(*)::int AS users,
-            COALESCE(SUM(NULLIF(pkg->>'remainMb', '')::numeric), 0)::float AS "remainMb",
-            COALESCE(SUM(NULLIF(pkg->>'usedMb', '')::numeric), 0)::float AS "usedMb"
-       FROM app_users, jsonb_array_elements(COALESCE(active_packages, '[]'::jsonb)) AS pkg
-      GROUP BY pkg->>'name' ORDER BY users DESC LIMIT 10`,
-    { type: QueryTypes.SELECT },
+  const inUse = await select(
+    `SELECT ${top(10)} pkg."name" AS "name", CAST(COUNT(*) AS int) AS "users",
+            CAST(COALESCE(SUM(${toNumber('pkg."remainMb"')}), 0) AS float) AS "remainMb",
+            CAST(COALESCE(SUM(${toNumber('pkg."usedMb"')}), 0) AS float) AS "usedMb"
+       FROM app_users
+      ${jsonRows('active_packages', 'pkg', { name: 'name', remainMb: 'remainMb', usedMb: 'usedMb' })}
+      GROUP BY pkg."name" ORDER BY "users" DESC
+      ${limit(10)}`,
   );
-  const lowData = await sequelize.query(
-    `SELECT id, msisdn, first_name AS "firstName", last_name AS "lastName",
+  const lowData = await select(
+    `SELECT ${top(10)} id AS "id", msisdn AS "msisdn", first_name AS "firstName", last_name AS "lastName",
             data_remain_mb AS "remainMb", data_used_mb AS "usedMb", packages_updated_at AS "updatedAt",
-            jsonb_array_length(COALESCE(active_packages, '[]'::jsonb))::int AS packages
+            ${jsonLength('active_packages')} AS "packages"
        FROM app_users
       WHERE packages_updated_at IS NOT NULL
-      ORDER BY data_remain_mb ASC NULLS LAST LIMIT 10`,
-    { type: QueryTypes.SELECT },
+      ORDER BY CASE WHEN data_remain_mb IS NULL THEN 1 ELSE 0 END, data_remain_mb ASC
+      ${limit(10)}`,
   );
 
   return { days, totals, today: todayTotals, byChannel, topPackages, daily, recent, data, inUse, lowData };
@@ -257,17 +281,17 @@ export async function getPackageStats(query) {
 export async function getFeatureStats(query) {
   const { since, until, days } = period(query, 30);
   const userId = isUuid(query.userId) ? query.userId : null;
-  const rows = await sequelize.query(
-    `SELECT name,
-            COUNT(*)::int AS uses,
-            COUNT(*) FILTER (WHERE success IS TRUE)::int AS succeeded,
-            COUNT(*) FILTER (WHERE success IS FALSE)::int AS failed,
-            COUNT(DISTINCT user_id)::int AS users,
+  const rows = await select(
+    `SELECT name AS "name",
+            CAST(COUNT(*) AS int) AS "uses",
+            ${countIf(isTrue('success'))} AS "succeeded",
+            ${countIf(isFalse('success'))} AS "failed",
+            CAST(COUNT(DISTINCT user_id) AS int) AS "users",
             MAX(occurred_at) AS "lastAt"
        FROM events
       WHERE type = 'api' AND occurred_at BETWEEN :since AND :until ${userId ? 'AND user_id = :userId' : ''}
       GROUP BY name`,
-    { replacements: { since, until, userId }, type: QueryTypes.SELECT },
+    { since, until, userId },
   );
 
   return { days, apis: rows };

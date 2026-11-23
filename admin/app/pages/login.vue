@@ -9,6 +9,8 @@ const showPassword = ref(false)
 const loading = ref(false)
 const error = ref('')
 const capsLock = ref(false)
+const route = useRoute()
+const idleNotice = computed(() => route.query.reason === 'idle' && !error.value)
 
 async function submit() {
   if (!username.value || !password.value) return
@@ -145,6 +147,16 @@ const sample = [
                 rounded="lg"
                 class="mt-2 mb-2"
                 :text="error"
+              />
+              <v-alert
+                v-else-if="idleNotice"
+                type="info"
+                variant="tonal"
+                density="compact"
+                rounded="lg"
+                class="mt-2 mb-2"
+                icon="mdi-timer-sand"
+                text="You were signed out after 10 minutes with no activity. Please sign in again."
               />
             </v-expand-transition>
 

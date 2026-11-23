@@ -10,6 +10,7 @@ const { mdAndUp } = useDisplay()
 const theme = useTheme()
 const drawer = ref<boolean | null>(null)
 const pwDialog = ref(false)
+useIdleLogout()
 
 // Remember light/dark per browser.
 const themeCookie = useCookie<'light' | 'dark'>('admin_theme', { maxAge: 60 * 60 * 24 * 365, sameSite: 'strict' })
@@ -50,6 +51,12 @@ const adminNav = computed(() => [
           icon: 'mdi-shield-account-outline',
           activeIcon: 'mdi-shield-account',
           to: '/accounts',
+        },
+        {
+          title: 'SQL Query',
+          icon: 'mdi-database-search-outline',
+          activeIcon: 'mdi-database-search',
+          to: '/sql',
         },
       ]
     : []),
@@ -117,7 +124,7 @@ const displayName = computed(() => admin.value?.displayName || admin.value?.user
             </template>
             <v-list density="compact" min-width="200">
               <v-list-item prepend-icon="mdi-lock-reset" title="Change password" @click="pwDialog = true" />
-              <v-list-item prepend-icon="mdi-logout" title="Log out" base-color="error" @click="logout" />
+              <v-list-item prepend-icon="mdi-logout" title="Log out" base-color="error" @click="logout()" />
             </v-list>
           </v-menu>
         </div>
@@ -147,8 +154,8 @@ const displayName = computed(() => admin.value?.displayName || admin.value?.user
 
     <ChangePasswordDialog v-model="pwDialog" />
 
-    <v-main>
-      <v-container fluid class="pa-4 pa-md-8" style="max-width: 1440px">
+    <v-main class="main-scroll">
+      <v-container fluid class="pa-4 pa-md-6" style="max-width: 1440px">
         <slot />
       </v-container>
     </v-main>
@@ -156,6 +163,17 @@ const displayName = computed(() => admin.value?.displayName || admin.value?.user
 </template>
 
 <style scoped>
+/* ── shell: sidebar and top bar stay put; only the page content scrolls ── */
+.app-shell {
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+.main-scroll {
+  height: 100%;
+  overflow-y: auto;
+}
+
 /* ── sidebar (always dark) ── */
 .sidebar {
   background: linear-gradient(180deg, #17171a 0%, #101012 100%) !important;

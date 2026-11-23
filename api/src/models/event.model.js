@@ -1,5 +1,5 @@
 import { DataTypes } from 'sequelize';
-import { sequelize } from '../db/index.js';
+import { jsonColumn, oneOf, sequelize } from '../db/index.js';
 
 export const EVENT_TYPES = ['login', 'logout', 'screen_view', 'tap', 'action', 'api', 'error'];
 
@@ -11,10 +11,10 @@ export const Event = sequelize.define(
     userId: { type: DataTypes.UUID },
     msisdn: { type: DataTypes.STRING(20) },
     sessionId: { type: DataTypes.STRING(64) },
-    type: { type: DataTypes.ENUM(...EVENT_TYPES), allowNull: false },
+    type: oneOf(EVENT_TYPES, { allowNull: false }),
     name: { type: DataTypes.STRING(150), allowNull: false },
     screen: { type: DataTypes.STRING(150) },
-    properties: { type: DataTypes.JSONB, allowNull: false, defaultValue: {} },
+    properties: jsonColumn('properties', { allowNull: false, defaultValue: {} }),
     // For API calls: did it work, and the server's message (ResultDesc).
     success: { type: DataTypes.BOOLEAN },
     result: { type: DataTypes.STRING(300) },

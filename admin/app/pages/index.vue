@@ -334,7 +334,7 @@ function openTransfer(_: unknown, { item }: { item: Transfer }) {
       <!-- needs attention: today's failures -->
       <v-card v-if="data.recentFailures.length" class="bordered attention mt-4">
         <div class="attention-head">
-          <div class="attention-icon"><v-icon icon="mdi-alert-octagon-outline" size="26" /></div>
+          <div class="attention-icon"><v-icon icon="mdi-alert-octagon-outline" size="20" /></div>
           <div class="flex-grow-1">
             <div class="attention-title">Needs attention</div>
             <div class="attention-sub">
@@ -355,7 +355,7 @@ function openTransfer(_: unknown, { item }: { item: Transfer }) {
         </div>
         <div class="fail-list">
           <NuxtLink v-for="f in data.recentFailures" :key="f.id" :to="`/events/${f.id}`" class="fail-item">
-            <div class="fail-dot"><v-icon icon="mdi-close" size="16" /></div>
+            <div class="fail-dot"><v-icon icon="mdi-close" size="14" /></div>
             <div class="flex-grow-1" style="min-width: 0">
               <div class="d-flex align-center ga-2">
                 <span class="font-weight-bold text-truncate">{{ eventTitle(f) }}</span>
@@ -388,7 +388,7 @@ function openTransfer(_: unknown, { item }: { item: Transfer }) {
           </template>
         </v-card-item>
         <v-card-text>
-          <ColumnChart :points="trend" :unit="METRIC_LABEL[metric]" />
+          <ColumnChart :points="trend" :unit="METRIC_LABEL[metric]" :height="150" />
         </v-card-text>
       </v-card>
 
@@ -399,7 +399,7 @@ function openTransfer(_: unknown, { item }: { item: Transfer }) {
           <v-card-subtitle>How users left the app · {{ days }}</v-card-subtitle>
         </v-card-item>
         <v-card-text>
-          <SplitBar :parts="logoutParts" empty-text="No logouts yet" :height="52" />
+          <SplitBar :parts="logoutParts" empty-text="No logouts yet" :height="40" />
         </v-card-text>
       </v-card>
 
@@ -731,15 +731,15 @@ function openTransfer(_: unknown, { item }: { item: Transfer }) {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 14px;
-  padding: 18px 20px;
+  gap: 12px;
+  padding: 10px 16px;
   background: linear-gradient(120deg, rgba(217, 68, 58, 0.12), rgba(217, 68, 58, 0.04));
   border-bottom: 1px solid rgba(217, 68, 58, 0.15);
 }
 .attention-icon {
-  width: 46px;
-  height: 46px;
-  border-radius: 14px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
   display: grid;
   place-items: center;
   color: #fff;
@@ -761,8 +761,8 @@ function openTransfer(_: unknown, { item }: { item: Transfer }) {
 .fail-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 20px;
+  gap: 10px;
+  padding: 6px 16px;
   color: inherit;
   text-decoration: none;
   border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.06);
@@ -772,8 +772,8 @@ function openTransfer(_: unknown, { item }: { item: Transfer }) {
   background: rgba(217, 68, 58, 0.05);
 }
 .fail-dot {
-  width: 30px;
-  height: 30px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   display: grid;
   place-items: center;

@@ -1,5 +1,5 @@
 import { DataTypes } from 'sequelize';
-import { sequelize } from '../db/index.js';
+import { jsonColumn, sequelize } from '../db/index.js';
 
 /** A person using the MyTPlus app, identified by phone number (msisdn). */
 export const AppUser = sequelize.define(
@@ -19,7 +19,7 @@ export const AppUser = sequelize.define(
     // Internal note written by staff on the admin website.
     note: { type: DataTypes.TEXT },
     // Latest snapshot of the user's active packages (from the app's InquiryPackage call).
-    activePackages: { type: DataTypes.JSONB },
+    activePackages: jsonColumn('activePackages'),
     dataRemainMb: { type: DataTypes.INTEGER },
     dataUsedMb: { type: DataTypes.INTEGER },
     packagesUpdatedAt: { type: DataTypes.DATE },

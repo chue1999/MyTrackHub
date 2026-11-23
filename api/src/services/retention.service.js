@@ -1,5 +1,5 @@
-import { Op } from 'sequelize';
-import { sequelize } from '../db/index.js';
+import { Op, QueryTypes } from 'sequelize';
+import { isMssql, sequelize } from '../db/index.js';
 import { Event, Setting } from '../models/index.js';
 import { logger } from '../utils/logger.js';
 
@@ -40,11 +40,15 @@ export function cutoffFor(months, now = new Date()) {
 async function deleteOlderThan(cutoff) {
   let total = 0;
   for (;;) {
-    const [, meta] = await sequelize.query(
-      `DELETE FROM events WHERE id IN (SELECT id FROM events WHERE occurred_at < :cutoff LIMIT ${DELETE_BATCH_SIZE})`,
-      { replacements: { cutoff } },
+    const [row] = await sequelize.query(
+      isMssql
+        ? `DELETE TOP (${DELETE_BATCH_SIZE}) FROM events WHERE occurred_at < :cutoff; SELECT @@ROWCOUNT AS deleted;`
+        : `WITH gone AS (DELETE FROM events WHERE id IN
+             (SELECT id FROM events WHERE occurred_at < :cutoff LIMIT ${DELETE_BATCH_SIZE}) RETURNING 1)
+           SELECT COUNT(*) AS deleted FROM gone`,
+      { replacements: { cutoff }, type: QueryTypes.SELECT },
     );
-    const deleted = meta?.rowCount ?? 0;
+    const deleted = Number(row?.deleted ?? 0);
     total += deleted;
     if (deleted < DELETE_BATCH_SIZE) return total;
   }

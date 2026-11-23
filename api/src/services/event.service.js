@@ -1,5 +1,5 @@
 import { Op } from 'sequelize';
-import { sequelize } from '../db/index.js';
+import { isMssql, sequelize } from '../db/index.js';
 import { AppUser, Event, EVENT_TYPES } from '../models/index.js';
 import { HttpError } from '../utils/http-error.js';
 import { dateBounds, isUuid, likePattern, phoneDigits } from '../utils/query.js';
@@ -18,21 +18,25 @@ function parseApiNames(value) {
     .slice(0, 40);
 }
 
+// Case-insensitive LIKE: ILIKE on PostgreSQL; SQL Server's collation already ignores case.
+const LIKE = isMssql ? Op.like : Op.iLike;
+// The JSON details as text (SQL Server already stores them as text).
+const propertiesText = () =>
+  isMssql ? sequelize.col('Event.properties') : sequelize.cast(sequelize.col('Event.properties'), 'text');
+
 function searchConditions(search) {
   const digits = phoneDigits(search);
   const pattern = likePattern(search);
   return [
-    { name: { [Op.iLike]: pattern } },
-    { screen: { [Op.iLike]: pattern } },
-    { result: { [Op.iLike]: pattern } },
-    // The user's name: typing "Somsack" finds his actions too.
-    { '$user.first_name$': { [Op.iLike]: pattern } },
-    { '$user.last_name$': { [Op.iLike]: pattern } },
+    { name: { [LIKE]: pattern } },
+    { screen: { [LIKE]: pattern } },
+    { result: { [LIKE]: pattern } },
+    // The user's name: typing "Somsack" finds their actions too.
+    { '$user.first_name$': { [LIKE]: pattern } },
+    { '$user.last_name$': { [LIKE]: pattern } },
     ...(digits.length >= 3 ? [{ msisdn: { [Op.like]: likePattern(digits) } }] : []),
     // Also look inside request/response details (e.g. a transfer receiver).
-    ...(digits.length >= 6
-      ? [sequelize.where(sequelize.cast(sequelize.col('properties'), 'text'), { [Op.like]: likePattern(digits) })]
-      : []),
+    ...(digits.length >= 6 ? [sequelize.where(propertiesText(), { [Op.like]: likePattern(digits) })] : []),
   ];
 }
 
