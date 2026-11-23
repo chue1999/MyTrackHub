@@ -8,6 +8,7 @@ const password = ref('')
 const showPassword = ref(false)
 const loading = ref(false)
 const error = ref('')
+const isCcareAccount = ref(false)
 const capsLock = ref(false)
 const route = useRoute()
 const idleNotice = computed(() => route.query.reason === 'idle' && !error.value)
@@ -16,11 +17,18 @@ async function submit() {
   if (!username.value || !password.value) return
   loading.value = true
   error.value = ''
+  isCcareAccount.value = false
   try {
     await login(username.value.trim(), password.value)
     await navigateTo('/')
   } catch (e) {
-    error.value = errorMessage(e, 'Cannot reach the server. Is the API running?')
+    // A CCare account typed here is sent to its own portal.
+    if ((e as { data?: { code?: string } })?.data?.code === 'USE_CCARE_PORTAL') {
+      isCcareAccount.value = true
+      error.value = 'This is a CCare account. Use the CCare sign-in page.'
+    } else {
+      error.value = errorMessage(e, 'Cannot reach the server. Is the API running?')
+    }
   } finally {
     loading.value = false
   }
@@ -175,7 +183,25 @@ const sample = [
             </v-btn>
           </v-form>
 
-          <div class="d-flex align-center ga-2 mt-8 text-caption text-medium-emphasis">
+          <v-btn
+            v-if="isCcareAccount"
+            :to="`/ccare-login?name=${encodeURIComponent(username.trim())}`"
+            color="primary"
+            variant="tonal"
+            block
+            rounded="lg"
+            class="mt-3 text-none font-weight-bold"
+            prepend-icon="mdi-headset"
+          >
+            Go to CCare sign-in
+          </v-btn>
+
+          <div class="text-center mt-5 text-body-2">
+            CCare staff?
+            <NuxtLink to="/ccare-login" class="toggle-link">Sign in here</NuxtLink>
+          </div>
+
+          <div class="d-flex align-center ga-2 mt-6 text-caption text-medium-emphasis">
             <v-icon icon="mdi-shield-check-outline" size="16" />
             Only authorised T-Plus staff. Forgot your password? Ask an administrator to reset it.
           </div>
@@ -342,5 +368,13 @@ const sample = [
 }
 .submit-btn {
   letter-spacing: 0;
+}
+.toggle-link {
+  color: rgb(var(--v-theme-primary));
+  font-weight: 700;
+  text-decoration: none;
+}
+.toggle-link:hover {
+  text-decoration: underline;
 }
 </style>

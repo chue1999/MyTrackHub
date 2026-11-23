@@ -197,3 +197,66 @@ export async function runQuery(db, text) {
   for (const rs of out.resultSets) rs.truncated = rs.total > rs.rows.length;
   return out;
 }
+
+// ── Back up (like SSMS: Tasks → Back Up…) ──
+
+/**
+ * Full COPY_ONLY backup of the database to a .bak file in SQL Server's own
+ * backup folder (on the SQL Server machine). COPY_ONLY keeps the DBA's normal
+ * backup chain untouched.
+ */
+export async function backupDatabase(db) {
+  const pool = await getPool();
+  const qdb = await checkDatabase(pool, db);
+  // File name with the SQL Server machine's own clock: TPLUSTRACKINGHUB_20261123_153129.bak
+  try {
+    const r = await pool
+      .request()
+      .input('db', sql.NVarChar(128), cfg.name)
+      .input('label', sql.NVarChar(128), `${cfg.name} copy-only backup (MyTPlus Admin)`).query(`
+        DECLARE @dir nvarchar(400) = CAST(SERVERPROPERTY('InstanceDefaultBackupPath') AS nvarchar(400));
+        DECLARE @file nvarchar(700) = @dir + CASE WHEN RIGHT(@dir, 1) = N'\\' THEN N'' ELSE N'\\' END
+          + @db + N'_' + FORMAT(SYSDATETIME(), 'yyyyMMdd_HHmmss') + N'.bak';
+        IF CAST(SERVERPROPERTY('EngineEdition') AS int) = 4 -- Express: no compression
+          BACKUP DATABASE ${qdb} TO DISK = @file WITH COPY_ONLY, INIT, CHECKSUM, NAME = @label;
+        ELSE
+          BACKUP DATABASE ${qdb} TO DISK = @file WITH COPY_ONLY, INIT, CHECKSUM, COMPRESSION, NAME = @label;
+        SELECT @file AS [file];`);
+    const file = r.recordsets.at(-1)?.[0]?.file;
+    const [last] = await listBackups(db).catch(() => []);
+    return last?.file === file ? last : { file, finishedAt: new Date().toISOString() };
+  } catch (err) {
+    throw sqlError(err);
+  }
+}
+
+/** The latest backups of this database (from msdb history), newest first. */
+export async function listBackups(db) {
+  const pool = await getPool();
+  await checkDatabase(pool, db);
+  try {
+    const r = await pool.request().input('db', sql.NVarChar(128), cfg.name).query(`
+      SELECT TOP (20)
+             bmf.physical_device_name AS [file],
+             bs.backup_start_date      AS startedAt,
+             bs.backup_finish_date     AS finishedAt,
+             CAST(bs.backup_size AS bigint)            AS sizeBytes,
+             CAST(bs.compressed_backup_size AS bigint) AS compressedBytes,
+             CASE bs.type WHEN 'D' THEN 'Full' WHEN 'I' THEN 'Differential' WHEN 'L' THEN 'Log' ELSE bs.type END AS type,
+             bs.is_copy_only AS copyOnly,
+             bs.user_name    AS byLogin
+      FROM msdb.dbo.backupset bs
+      JOIN msdb.dbo.backupmediafamily bmf ON bmf.media_set_id = bs.media_set_id
+      WHERE bs.database_name = @db
+      ORDER BY bs.backup_finish_date DESC`);
+    return r.recordset.map((b) => ({
+      ...b,
+      startedAt: b.startedAt?.toISOString?.() ?? b.startedAt,
+      finishedAt: b.finishedAt?.toISOString?.() ?? b.finishedAt,
+      sizeBytes: Number(b.sizeBytes),
+      compressedBytes: Number(b.compressedBytes),
+    }));
+  } catch (err) {
+    throw sqlError(err);
+  }
+}

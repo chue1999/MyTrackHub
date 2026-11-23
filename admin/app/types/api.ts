@@ -4,7 +4,8 @@
  */
 
 export type EventType = 'login' | 'logout' | 'screen_view' | 'tap' | 'action' | 'api' | 'error'
-export type AdminRole = 'admin' | 'viewer'
+// 'admin'/'viewer' come from the admins table; 'ccare' from the Tb_User_detail staff table.
+export type AdminRole = 'admin' | 'viewer' | 'ccare'
 
 /**
  * Free-form JSON recorded from the app (request/response bodies, purchase
@@ -77,6 +78,29 @@ export interface AdminInfo {
   username: string
   displayName?: string | null
   role?: AdminRole
+  // 'admin' = MyTPlus admins table; 'ccare' = CCare staff. CCare sees the CCare page only.
+  kind?: 'admin' | 'ccare'
+  // CCare only: may this person add/edit CCare accounts (Descrip = 'Admin')?
+  canManage?: boolean
+}
+
+/** A CCare staff account (Tb_User_detail). */
+export interface CcareUser {
+  id: number
+  name: string
+  nameLa: string | null
+  descrip: string | null
+  status: string | null
+  anb: number | null
+  brandId: string | null
+  division: string | null
+  position: string | null
+  staffId: string | null
+  staffTel: string | null
+  roleCrm: string | null
+  cdate: string | null
+  active: boolean
+  canManage: boolean
 }
 
 /** Website name and logo (Settings page). */

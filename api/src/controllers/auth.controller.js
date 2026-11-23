@@ -7,7 +7,7 @@ export async function login(req, res) {
 
 /** GET /auth/me */
 export function me(req, res) {
-  res.json(req.me);
+  res.json(req.identity);
 }
 
 /** POST /auth/password */

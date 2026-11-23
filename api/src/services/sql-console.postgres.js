@@ -182,3 +182,12 @@ export async function runQuery(db, text) {
   out.durationMs = Date.now() - started;
   return out;
 }
+
+// Backups are a SQL Server feature here (production). PostgreSQL (dev) uses pg_dump.
+const noBackup = () => {
+  throw HttpError.badRequest('Back up is available on SQL Server (production). For PostgreSQL use pg_dump.');
+};
+export const backupDatabase = noBackup;
+export async function listBackups() {
+  return [];
+}

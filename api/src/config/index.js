@@ -68,6 +68,26 @@ const schema = z.object({
   JWT_EXPIRES_IN: z.string().default('12h'),
   ADMIN_USERNAME: z.string().default('admin'),
   ADMIN_PASSWORD: z.string().default(''),
+
+  // CCare staff sign-in (Tb_User_detail): one-time code by SMS (TplusSMS gateway).
+  SMS_URL: z.string().default(''),
+  SMS_APIKEY: z.string().default(''),
+  SMS_USER: z.string().default('TPLUS'),
+  SMS_FROM: z.string().default('TPLUS'),
+  // Lao mobiles are stored as 20xxxxxxxx; the gateway may want 85620xxxxxxxx.
+  SMS_COUNTRY_CODE: z.string().default(''),
+  OTP_TTL_SECONDS: z.coerce.number().int().positive().default(300),
+  OTP_LENGTH: z.coerce.number().int().min(4).max(8).default(6),
+  // Comma-separated phone numbers that always receive a REAL SMS while testing;
+  // when SMS is unconfigured the code is returned to the caller instead (dev only).
+  OTP_TEST_NUMBERS: z.string().default(''),
+
+  // CCare login source. 'proxy' delegates to the existing My CCare auth API
+  // (password + OTP exactly as the current web); 'local' uses our own md5 + SMS.
+  CCARE_AUTH_MODE: z.enum(['proxy', 'local']).default('proxy'),
+  CCARE_AUTH_URL: z.string().default('http://10.30.6.94:5151'),
+  CCARE_LOGIN_PATH: z.string().default('/api/8'),
+  CCARE_VERIFY_PATH: z.string().default('/api/9'),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -119,4 +139,30 @@ export const config = Object.freeze({
 
   jwt: Object.freeze({ secret: env.JWT_SECRET, expiresIn: env.JWT_EXPIRES_IN }),
   firstAdmin: Object.freeze({ username: env.ADMIN_USERNAME, password: env.ADMIN_PASSWORD }),
+
+  // CCare SMS one-time codes. `enabled` false → the code is returned to the
+  // caller (development), so the flow works without a live SMS gateway.
+  sms: Object.freeze({
+    enabled: !!env.SMS_URL && !!env.SMS_APIKEY,
+    url: env.SMS_URL,
+    apiKey: env.SMS_APIKEY,
+    user: env.SMS_USER,
+    from: env.SMS_FROM,
+    countryCode: env.SMS_COUNTRY_CODE,
+  }),
+  otp: Object.freeze({
+    ttlMs: env.OTP_TTL_SECONDS * 1000,
+    length: env.OTP_LENGTH,
+    testNumbers: env.OTP_TEST_NUMBERS.split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  }),
+
+  // CCare login: delegate to the existing My CCare API ('proxy') or own it ('local').
+  ccareAuth: Object.freeze({
+    mode: env.CCARE_AUTH_MODE,
+    base: env.CCARE_AUTH_URL.replace(/\/$/, ''),
+    loginPath: env.CCARE_LOGIN_PATH,
+    verifyPath: env.CCARE_VERIFY_PATH,
+  }),
 });

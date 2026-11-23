@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useDisplay, useTheme } from 'vuetify'
+import type { AdminInfo } from '~/types/api'
 const { branding } = useBranding()
 
 const { admin, logout } = useAuth()
@@ -25,42 +26,71 @@ onMounted(async () => {
   live.connect()
   // Refresh name/role (e.g. after an administrator changed this account).
   try {
-    const me = await api<{ id: number; username: string; displayName: string | null; role: 'admin' | 'viewer' }>(
-      '/auth/me',
-    )
-    admin.value = { id: me.id, username: me.username, displayName: me.displayName, role: me.role }
+    const me = await api<AdminInfo>('/auth/me')
+    admin.value = {
+      id: me.id,
+      username: me.username,
+      displayName: me.displayName,
+      role: me.role,
+      kind: me.kind,
+      canManage: me.canManage,
+    }
   } catch {
     // Offline or API down: keep the account info stored at login.
   }
 })
 
-const nav = computed(() => [
-  { title: 'Dashboard', icon: 'mdi-view-dashboard-outline', activeIcon: 'mdi-view-dashboard', to: '/' },
-  { title: 'Users', icon: 'mdi-account-group-outline', activeIcon: 'mdi-account-group', to: '/users' },
-  { title: 'Activity log', icon: 'mdi-timeline-text-outline', activeIcon: 'mdi-timeline-text', to: '/events' },
-  { title: 'App features', icon: 'mdi-apps', activeIcon: 'mdi-apps', to: '/features' },
-  { title: 'Packages', icon: 'mdi-package-variant', activeIcon: 'mdi-package-variant-closed', to: '/packages' },
-  { title: 'Reports', icon: 'mdi-file-chart-outline', activeIcon: 'mdi-file-chart', to: '/reports' },
-])
-const adminNav = computed(() => [
-  { title: 'Settings', icon: 'mdi-cog-outline', activeIcon: 'mdi-cog', to: '/settings' },
-  ...(admin.value?.role === 'admin'
-    ? [
-        {
-          title: 'Admin accounts',
-          icon: 'mdi-shield-account-outline',
-          activeIcon: 'mdi-shield-account',
-          to: '/accounts',
-        },
-        {
-          title: 'SQL Query',
-          icon: 'mdi-database-search-outline',
-          activeIcon: 'mdi-database-search',
-          to: '/sql',
-        },
-      ]
-    : []),
-])
+const isCcare = computed(() => admin.value?.kind === 'ccare')
+const canManageCcare = computed(() => admin.value?.role === 'admin' || admin.value?.canManage === true)
+const ccareItem = { title: 'CCare accounts', icon: 'mdi-headset', activeIcon: 'mdi-headset', to: '/ccare' }
+const ccareLogItem = {
+  title: 'CCare activity',
+  icon: 'mdi-clipboard-text-clock-outline',
+  activeIcon: 'mdi-clipboard-text-clock',
+  to: '/ccare-logs',
+}
+const ccareNav = computed(() => (canManageCcare.value ? [ccareItem, ccareLogItem] : [ccareItem]))
+
+// CCare staff see only the CCare pages; MyTPlus admins see everything plus CCare.
+const nav = computed(() =>
+  isCcare.value
+    ? ccareNav.value
+    : [
+        { title: 'Dashboard', icon: 'mdi-view-dashboard-outline', activeIcon: 'mdi-view-dashboard', to: '/' },
+        { title: 'Users', icon: 'mdi-account-group-outline', activeIcon: 'mdi-account-group', to: '/users' },
+        { title: 'Activity log', icon: 'mdi-timeline-text-outline', activeIcon: 'mdi-timeline-text', to: '/events' },
+        { title: 'App features', icon: 'mdi-apps', activeIcon: 'mdi-apps', to: '/features' },
+        { title: 'Packages', icon: 'mdi-package-variant', activeIcon: 'mdi-package-variant-closed', to: '/packages' },
+        { title: 'Reports', icon: 'mdi-file-chart-outline', activeIcon: 'mdi-file-chart', to: '/reports' },
+        ...ccareNav.value,
+      ],
+)
+const adminNav = computed(() =>
+  isCcare.value
+    ? []
+    : [
+        { title: 'Settings', icon: 'mdi-cog-outline', activeIcon: 'mdi-cog', to: '/settings' },
+        ...(admin.value?.role === 'admin'
+          ? [
+              {
+                title: 'Admin accounts',
+                icon: 'mdi-shield-account-outline',
+                activeIcon: 'mdi-shield-account',
+                to: '/accounts',
+              },
+              {
+                title: 'SQL Query',
+                icon: 'mdi-database-search-outline',
+                activeIcon: 'mdi-database-search',
+                to: '/sql',
+              },
+            ]
+          : []),
+      ],
+)
+const roleLabel = computed(() =>
+  isCcare.value ? 'CCare staff' : admin.value?.role === 'admin' ? 'Administrator' : 'Viewer',
+)
 const isActive = (to: string) => (to === '/' ? route.path === '/' : route.path.startsWith(to))
 
 const displayName = computed(() => admin.value?.displayName || admin.value?.username || '')
@@ -116,14 +146,19 @@ const displayName = computed(() => admin.value?.displayName || admin.value?.user
           </v-avatar>
           <div class="flex-grow-1" style="min-width: 0">
             <div class="me-name text-truncate">{{ displayName }}</div>
-            <div class="me-role">{{ admin?.role === 'admin' ? 'Administrator' : 'Viewer' }}</div>
+            <div class="me-role">{{ roleLabel }}</div>
           </div>
           <v-menu location="top end">
             <template #activator="{ props }">
               <v-btn v-bind="props" icon="mdi-dots-vertical" variant="text" size="small" />
             </template>
             <v-list density="compact" min-width="200">
-              <v-list-item prepend-icon="mdi-lock-reset" title="Change password" @click="pwDialog = true" />
+              <v-list-item
+                v-if="!isCcare"
+                prepend-icon="mdi-lock-reset"
+                title="Change password"
+                @click="pwDialog = true"
+              />
               <v-list-item prepend-icon="mdi-logout" title="Log out" base-color="error" @click="logout()" />
             </v-list>
           </v-menu>

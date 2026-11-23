@@ -12,3 +12,4 @@ export const runQuerySchema = z.object({
   db: name,
   sql: z.string().min(1, 'Type some SQL first').max(1_000_000, 'SQL text is too long'),
 });
+export const backupSchema = z.object({ conn, db: name });

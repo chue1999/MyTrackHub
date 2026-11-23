@@ -1,30 +1,69 @@
 import type { AdminInfo } from '~/types/api'
 
+export interface OtpChallenge {
+  challenge: string
+  phoneHint: string
+  length: number
+  devCode?: string
+}
+
 /** Admin login state, kept in cookies so it survives a page reload. */
 export function useAuth() {
   const token = useCookie<string | null>('admin_token', { sameSite: 'strict', maxAge: 60 * 60 * 12 })
   const admin = useCookie<AdminInfo | null>('admin_info', { sameSite: 'strict', maxAge: 60 * 60 * 12 })
   const config = useRuntimeConfig()
+  const post = <T>(url: string, body: Record<string, unknown>) =>
+    $fetch<T>(`/api/v1/admin${url}`, { baseURL: config.public.apiBase, method: 'POST', body })
 
-  async function login(username: string, password: string) {
-    const res = await $fetch<{ token: string; admin: AdminInfo }>('/api/v1/admin/auth/login', {
-      baseURL: config.public.apiBase,
-      method: 'POST',
-      body: { username, password },
-    })
+  function setSession(res: { token: string; admin: AdminInfo }) {
     token.value = res.token
     admin.value = res.admin
     // A new sign-in starts the 10-minute idle timer fresh (else an old time would log out at once).
     resetIdleTimer()
+    return res.admin
   }
 
-  /** `reason: 'idle'` shows a "signed out after 10 minutes" note on the login page. */
+  /** MyTPlus admin sign-in (username + password). */
+  async function login(username: string, password: string) {
+    return setSession(await post('/auth/login', { username, password }))
+  }
+
+  // ── CCare staff: password → SMS code ──
+  const ccareStart = (name: string, password: string) => post<OtpChallenge>('/auth/ccare/start', { name, password })
+  async function ccareVerify(challenge: string, code: string) {
+    return setSession(await post('/auth/ccare/verify', { challenge, code }))
+  }
+  const ccareForgot = (name: string) => post<OtpChallenge>('/auth/ccare/forgot', { name })
+  const ccareReset = (challenge: string, code: string, newPassword: string) =>
+    post('/auth/ccare/reset', { challenge, code, newPassword })
+  const ccareRegister = (body: Record<string, unknown>) => post('/auth/ccare/register', body)
+  const ccareConfig = () =>
+    $fetch<{ mode: string; canRegister: boolean; canReset: boolean }>('/api/v1/admin/auth/ccare/config', {
+      baseURL: config.public.apiBase,
+    })
+
+  /** `reason: 'idle'` shows a "signed out" note. CCare staff return to their own portal. */
   function logout(reason?: 'idle') {
+    const wasCcare = admin.value?.kind === 'ccare'
     disconnectLive()
     token.value = null
     admin.value = null
+    if (wasCcare) return navigateTo(reason === 'idle' ? '/ccare-login?reason=idle' : '/ccare-login')
     return navigateTo(reason === 'idle' ? '/login?reason=idle' : '/login')
   }
 
-  return { token, admin, login, logout, isLoggedIn: computed(() => !!token.value) }
+  return {
+    token,
+    admin,
+    login,
+    ccareStart,
+    ccareVerify,
+    ccareForgot,
+    ccareReset,
+    ccareRegister,
+    ccareConfig,
+    logout,
+    isLoggedIn: computed(() => !!token.value),
+    isCcare: computed(() => admin.value?.kind === 'ccare'),
+  }
 }
