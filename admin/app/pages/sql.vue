@@ -553,7 +553,8 @@ const fmt = (n: number) => n.toLocaleString('en-US')
                 </thead>
                 <tbody>
                   <tr v-for="(r, ri) in current.rows" :key="ri">
-                    <td class="rownum">{{ ri + 1 }}</td>
+                    <!-- Row number drawn by CSS (::before), so copying the grid copies only the data columns. -->
+                    <td class="rownum" :data-n="ri + 1" />
                     <td
                       v-for="(v, ci) in r"
                       :key="ci"
@@ -855,6 +856,10 @@ const fmt = (n: number) => n.toLocaleString('en-US')
   color: rgba(var(--v-theme-on-surface), 0.45);
   background: rgb(var(--v-theme-surface));
   min-width: 44px;
+  user-select: none;
+}
+.grid td.rownum::before {
+  content: attr(data-n);
 }
 .grid th.rownum {
   z-index: 2;
