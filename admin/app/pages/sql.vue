@@ -111,6 +111,9 @@ const objectsError = ref('')
 const search = ref('')
 const open = ref<Record<string, boolean>>({ server: true, dbs: true, db: true, table: true })
 const toggle = (k: string) => (open.value[k] = !open.value[k])
+// Object Explorer collapse (remembered); gives the editor the full width when hidden.
+const explorerOpen = ref(load('sql_explorer_open') !== '0')
+watch(explorerOpen, (v) => save('sql_explorer_open', v ? '1' : '0'))
 const expanded = ref<Record<string, Column[] | 'loading' | undefined>>({})
 
 watch(db, loadObjects)
@@ -169,6 +172,7 @@ async function toggleColumns(o: DbObject) {
 }
 
 function selectTop(o: DbObject) {
+  pendingTable = o
   setEditor(isMssql.value ? `SELECT TOP (1000) *\nFROM ${fullName(o)};` : `SELECT *\nFROM ${fullName(o)}\nLIMIT 1000;`)
   run()
 }
@@ -283,7 +287,11 @@ const DEFAULT_SQL: Record<ConnId, string> = {
   postgres: "SELECT table_name\nFROM information_schema.tables\nWHERE table_schema = 'public'\nORDER BY table_name;",
 }
 const sqlText = ref(load(`sql_text_${conn.value}`) || DEFAULT_SQL[conn.value])
-watch(sqlText, (v) => save(`sql_text_${conn.value}`, v))
+watch(sqlText, (v) => {
+  save(`sql_text_${conn.value}`, v)
+  // Keep the highlight/gutter layers lined up with the caret after the DOM updates.
+  nextTick(syncScroll)
+})
 
 function setEditor(text: string) {
   sqlText.value = text
@@ -308,7 +316,7 @@ function onEditorKey(e: KeyboardEvent) {
     insertAtCursor('    ')
   }
 }
-function syncScroll() {
+function applyScroll() {
   const el = editor.value
   if (!el) return
   if (highlightEl.value) {
@@ -316,6 +324,12 @@ function syncScroll() {
     highlightEl.value.scrollLeft = el.scrollLeft
   }
   if (gutterEl.value) gutterEl.value.scrollTop = el.scrollTop
+}
+// Sync now and again next frame: typing/caret moves scroll the textarea only
+// after layout, so the second pass catches the final position.
+function syncScroll() {
+  applyScroll()
+  requestAnimationFrame(applyScroll)
 }
 const lineCount = computed(() => sqlText.value.split('\n').length)
 
@@ -394,6 +408,11 @@ const runError = ref('')
 const tab = ref<number | 'messages'>(0)
 const resultConn = ref<ConnId>('postgres')
 const completedAt = ref<Date | null>(null)
+// The table the current grid came from, so a row can be deleted straight from it.
+// Set when the query was a single-table SELECT (via Object Explorer, or parsed).
+const resultTable = ref<DbObject | null>(null)
+const lastSelectSql = ref('')
+let pendingTable: DbObject | null = null
 
 /** Statements that change or remove a lot at once ask first. */
 function riskyReason(text: string) {
@@ -424,6 +443,8 @@ function run() {
 
 async function execute(text: string) {
   confirm.value.open = false
+  const forced = pendingTable
+  pendingTable = null
   running.value = true
   runError.value = ''
   resultConn.value = conn.value
@@ -435,12 +456,33 @@ async function execute(text: string) {
     result.value = r
     completedAt.value = new Date()
     tab.value = r.error || !r.resultSets.length ? 'messages' : 0
+    // Remember the source table (for "Delete row") only for a plain single-table SELECT.
+    if (!r.error && r.resultSets.length) {
+      resultTable.value = forced ?? tableFromSelect(text)
+      lastSelectSql.value = text
+    }
   } catch (e) {
     result.value = null
     runError.value = errorMessage(e, 'The query could not be sent.')
   } finally {
     running.value = false
   }
+}
+
+/** The single table a simple `SELECT … FROM <schema>.<table>` reads, or null. */
+function tableFromSelect(sql: string): DbObject | null {
+  const t = sql
+    .replace(/--.*$/gm, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .trim()
+  if (/;\s*\S/.test(t.replace(/;\s*$/, ''))) return null // more than one statement
+  if (/\bJOIN\b/i.test(t) || !/^\s*SELECT\b/i.test(t)) return null
+  const name = '(?:\\[[^\\]]+\\]|"[^"]+"|\\w+)'
+  const m = t.match(new RegExp(`\\bFROM\\s+(?:(${name})\\s*\\.\\s*)?(${name})`, 'i'))
+  if (!m) return null
+  const unquote = (s: string) => s.replace(/^[["]|[\]"]$/g, '')
+  const schema = m[1] ? unquote(m[1]) : isMssql.value ? 'dbo' : 'public'
+  return { schema, name: unquote(m[2]), kind: 'table', rows: null }
 }
 
 const current = computed(() => (typeof tab.value === 'number' ? (result.value?.resultSets[tab.value] ?? null) : null))
@@ -450,6 +492,60 @@ const elapsed = computed(() => {
   const s = Math.floor((result.value?.durationMs ?? 0) / 1000)
   return [Math.floor(s / 3600), Math.floor(s / 60) % 60, s % 60].map((n) => String(n).padStart(2, '0')).join(':')
 })
+
+// ── delete a row straight from the grid (no need to write SQL by hand) ──
+const del = ref({ open: false, sql: '', wholeRow: false })
+/** A row can be deleted when we know which single table the grid came from. */
+const canDeleteRow = computed(() => !!sel.value && !!resultTable.value && !!current.value?.rows.length)
+
+function sqlLiteral(v: unknown): string {
+  if (v === null || v === undefined) return 'NULL'
+  if (typeof v === 'number') return String(v)
+  if (typeof v === 'boolean') return isMssql.value ? (v ? '1' : '0') : v ? 'TRUE' : 'FALSE'
+  return `'${String(v).replace(/'/g, "''")}'`
+}
+
+/** Builds a DELETE that matches exactly the chosen row (by key if known, else every column). */
+function buildDeleteSql(rowIndex: number) {
+  const rs = current.value
+  const tbl = resultTable.value
+  const row = rs?.rows[rowIndex]
+  if (!rs || !tbl || !row) return null
+  const names = rs.columns.map((c) => c.name)
+  const cols = expanded.value[key(tbl)]
+  const keyNames = Array.isArray(cols) ? cols.filter((c) => c.isKey).map((c) => c.name) : []
+  const useKeys = keyNames.length > 0 && keyNames.every((k) => names.includes(k))
+  const chosen = useKeys ? keyNames : names
+  const where = chosen
+    .map((nm) => {
+      const v = row[names.indexOf(nm)]
+      return v === null ? `${q(nm)} IS NULL` : `${q(nm)} = ${sqlLiteral(v)}`
+    })
+    .join('\n  AND ')
+  return { sql: `DELETE FROM ${fullName(tbl)}\nWHERE ${where};`, wholeRow: !useKeys }
+}
+
+function askDeleteRow() {
+  menu.value.open = false
+  if (!sel.value) return
+  const built = buildDeleteSql(sel.value.r)
+  if (!built) return
+  del.value = { open: true, sql: built.sql, wholeRow: built.wholeRow }
+}
+
+/** Runs the DELETE, then re-runs the original SELECT so the grid refreshes itself. */
+async function runDelete() {
+  const sql = del.value.sql
+  const refreshSql = lastSelectSql.value
+  const tbl = resultTable.value
+  del.value.open = false
+  await execute(sql)
+  if (result.value && !result.value.error && refreshSql) {
+    pendingTable = tbl
+    await execute(refreshSql)
+    sel.value = null
+  }
+}
 
 // ── cells ──
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/
@@ -569,14 +665,23 @@ const fmt = (n: number) => n.toLocaleString('en-US')
 
 <template>
   <div class="sql-page" :class="{ dark }">
-    <div class="sql-grid">
+    <div class="sql-grid" :class="{ 'explorer-collapsed': !explorerOpen }">
+      <!-- ═════ collapsed rail: a slim strip that re-opens the explorer ═════ -->
+      <button v-if="!explorerOpen" class="explorer-rail" title="Show Object Explorer" @click="explorerOpen = true">
+        <v-icon icon="mdi-chevron-double-right" size="18" />
+        <span class="rail-text">Object Explorer</span>
+      </button>
+
       <!-- ═════ Object Explorer ═════ -->
-      <section class="pane explorer">
+      <section v-show="explorerOpen" class="pane explorer">
         <header class="pane-title">
           <span>Object Explorer</span>
           <v-spacer />
           <button class="icon-btn" title="Refresh" @click="connect">
             <v-icon icon="mdi-refresh" size="16" />
+          </button>
+          <button class="icon-btn" title="Hide Object Explorer" @click="explorerOpen = false">
+            <v-icon icon="mdi-chevron-double-left" size="16" />
           </button>
         </header>
 
@@ -818,8 +923,13 @@ const fmt = (n: number) => n.toLocaleString('en-US')
               spellcheck="false"
               autocomplete="off"
               autocapitalize="off"
+              autocorrect="off"
+              wrap="off"
               placeholder="Type SQL here…"
               @keydown="onEditorKey"
+              @keyup="syncScroll"
+              @click="syncScroll"
+              @input="syncScroll"
               @scroll="syncScroll"
             />
           </div>
@@ -1005,9 +1115,53 @@ const fmt = (n: number) => n.toLocaleString('en-US')
           <v-list-item prepend-icon="mdi-table-headers-eye" title="Copy all with headers" @click="copyAll(true)" />
           <v-divider />
           <v-list-item prepend-icon="mdi-microsoft-excel" title="Save Results As (Excel)" @click="exportCurrent" />
+          <v-divider />
+          <v-list-item
+            class="danger-item"
+            prepend-icon="mdi-delete-outline"
+            title="Delete row"
+            :subtitle="canDeleteRow ? resultTable?.name : 'Select a row from one table'"
+            :disabled="!canDeleteRow"
+            @click="askDeleteRow"
+          />
         </template>
       </v-list>
     </v-menu>
+
+    <!-- delete a row confirmation -->
+    <v-dialog v-model="del.open" max-width="560">
+      <v-card rounded="xl">
+        <v-card-item>
+          <template #prepend>
+            <v-avatar color="error" variant="tonal" rounded="lg" size="40">
+              <v-icon icon="mdi-delete-alert-outline" size="22" />
+            </v-avatar>
+          </template>
+          <v-card-title class="font-weight-bold">Delete this row?</v-card-title>
+          <v-card-subtitle>This permanently removes the row from {{ resultTable?.name }}.</v-card-subtitle>
+        </v-card-item>
+        <v-divider />
+        <div class="pa-4">
+          <v-alert
+            v-if="del.wholeRow"
+            type="warning"
+            variant="tonal"
+            density="compact"
+            class="mb-3"
+            text="This table has no known primary key, so the row is matched on every column. Any identical rows would be removed too."
+          />
+          <div class="text-caption text-medium-emphasis mb-1">This runs:</div>
+          <pre class="confirm-sql">{{ del.sql }}</pre>
+        </div>
+        <v-card-actions class="px-4 pb-4">
+          <v-spacer />
+          <v-btn variant="text" class="text-none" @click="del.open = false">Cancel</v-btn>
+          <v-btn color="error" variant="flat" class="text-none" prepend-icon="mdi-delete" @click="runDelete">
+            Delete row
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <!-- back up database -->
     <v-dialog v-model="backup.open" max-width="760" scrollable>
@@ -1174,12 +1328,47 @@ const fmt = (n: number) => n.toLocaleString('en-US')
   gap: 12px;
   height: 100%;
 }
+.sql-grid.explorer-collapsed {
+  grid-template-columns: 34px minmax(0, 1fr);
+}
+.explorer-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--chrome);
+  color: rgba(var(--v-theme-on-surface), 0.7);
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.explorer-rail:hover {
+  background: rgb(var(--v-theme-surface));
+  color: rgb(var(--v-theme-primary));
+}
+.explorer-rail .rail-text {
+  writing-mode: vertical-rl;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+}
 @media (max-width: 960px) {
   .sql-page {
     height: auto;
   }
-  .sql-grid {
+  .sql-grid,
+  .sql-grid.explorer-collapsed {
     grid-template-columns: 1fr;
+  }
+  .explorer-rail {
+    flex-direction: row;
+    justify-content: center;
+  }
+  .explorer-rail .rail-text {
+    writing-mode: horizontal-tb;
   }
   .explorer {
     max-height: 380px;
@@ -1506,14 +1695,27 @@ button:disabled {
 .code-layer {
   position: absolute;
   inset: 0;
+  box-sizing: border-box;
   margin: 0;
   padding: 8px 12px;
   border: 0;
-  font-family: var(--mono);
-  font-size: 13px;
-  line-height: 20px;
-  white-space: pre;
+  /* One shorthand so textarea and <pre> share EVERY font sub-property (weight,
+     style, variant, stretch, line-height) — separate props leave UA defaults
+     that differ between the two elements and drift the caret. */
+  font: normal normal 400 13px / 20px var(--mono);
+  font-stretch: 100%;
+  letter-spacing: 0;
+  word-spacing: 0;
+  text-indent: 0;
   tab-size: 4;
+  white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
+  font-variant-ligatures: none;
+  font-feature-settings: normal;
+  font-kerning: none;
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
   overflow: auto;
 }
 .highlight {
@@ -1748,5 +1950,8 @@ button:disabled {
   font-size: 12px;
   white-space: pre-wrap;
   background: rgba(var(--v-theme-on-surface), 0.05);
+}
+.ctx .danger-item:not(.v-list-item--disabled) {
+  color: rgb(var(--v-theme-error));
 }
 </style>

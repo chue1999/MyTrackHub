@@ -12,10 +12,18 @@ html {
 .v-application,
 .v-application [class*='text-'],
 .v-application .v-btn,
-.v-application input,
-.v-application textarea {
+.v-application input:not(.code-layer),
+.v-application textarea:not(.code-layer) {
   font-family: var(--app-font) !important;
   letter-spacing: 0;
+}
+/* The SQL editor's textarea must stay monospace so its caret lines up with the
+   highlighted layer underneath it (the global Times/Phetsarath font is narrower
+   and pushes the caret out of place). */
+.v-application textarea.code-layer,
+.v-application .code-layer {
+  font-family: Consolas, Menlo, 'SF Mono', 'Courier New', monospace !important;
+  letter-spacing: 0 !important;
 }
 .v-application .v-btn {
   letter-spacing: 0;

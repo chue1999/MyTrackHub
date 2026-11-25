@@ -11,6 +11,12 @@ export interface OtpChallenge {
 export function useAuth() {
   const token = useCookie<string | null>('admin_token', { sameSite: 'strict', maxAge: 60 * 60 * 12 })
   const admin = useCookie<AdminInfo | null>('admin_info', { sameSite: 'strict', maxAge: 60 * 60 * 12 })
+  // Remembers which portal this device last used, so a returning CCare member
+  // lands on their own OTP page instead of the admin login (kept ~6 months).
+  const lastKind = useCookie<'admin' | 'ccare' | null>('last_login_kind', {
+    sameSite: 'strict',
+    maxAge: 60 * 60 * 24 * 180,
+  })
   const config = useRuntimeConfig()
   const post = <T>(url: string, body: Record<string, unknown>) =>
     $fetch<T>(`/api/v1/admin${url}`, { baseURL: config.public.apiBase, method: 'POST', body })
@@ -18,6 +24,7 @@ export function useAuth() {
   function setSession(res: { token: string; admin: AdminInfo }) {
     token.value = res.token
     admin.value = res.admin
+    lastKind.value = res.admin.kind === 'ccare' ? 'ccare' : 'admin'
     // A new sign-in starts the 10-minute idle timer fresh (else an old time would log out at once).
     resetIdleTimer()
     return res.admin

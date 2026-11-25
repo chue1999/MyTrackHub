@@ -18,9 +18,10 @@ export async function logCcare(entry) {
 export const ipOf = (req) => req.ip || req.get('x-forwarded-for') || null;
 
 /** A page of audit entries, newest first, for the CCare Activity log page. */
-export async function listLogs({ search = '', action, page = 1, pageSize = 50 }) {
+export async function listLogs({ search = '', action, userId, page = 1, pageSize = 50 }) {
   const where = {};
   if (action) where.action = action;
+  if (userId) where.ccareUserId = Number(userId);
   if (search) {
     where[Op.or] = [{ name: { [Op.like]: `%${search}%` } }, { actor: { [Op.like]: `%${search}%` } }];
   }
@@ -31,6 +32,24 @@ export async function listLogs({ search = '', action, page = 1, pageSize = 50 })
     offset: (page - 1) * pageSize,
   });
   return { rows, total: count, page, pageSize };
+}
+
+/** One audit entry by id, for the CCare activity detail page (null if missing). */
+export async function getLog(id) {
+  return CcareLog.findByPk(Number(id));
+}
+
+/** Per-user headline counts for the CCare user detail page. */
+export async function userSummary(userId) {
+  const id = Number(userId);
+  const where = { ccareUserId: id };
+  const [actions, logins, failed, last] = await Promise.all([
+    CcareLog.count({ where }),
+    CcareLog.count({ where: { ...where, action: 'login_ok' } }),
+    CcareLog.count({ where: { ...where, action: { [Op.in]: ['login_fail', 'otp_fail', 'otp_expired'] } } }),
+    CcareLog.findOne({ where, order: [['at', 'DESC']], attributes: ['at'] }),
+  ]);
+  return { actions, logins, failed, lastAt: last?.at ?? null };
 }
 
 /** The distinct action names present, for the filter dropdown. */
@@ -51,7 +70,16 @@ export async function summary() {
     count({ ...today, action: { [Op.in]: ['login_fail', 'otp_fail', 'otp_expired', 'otp_blocked'] } }),
     count({
       ...today,
-      action: { [Op.in]: ['account_create', 'account_update', 'account_close', 'account_reopen', 'password_reset_by_admin', 'password_reset'] },
+      action: {
+        [Op.in]: [
+          'account_create',
+          'account_update',
+          'account_close',
+          'account_reopen',
+          'password_reset_by_admin',
+          'password_reset',
+        ],
+      },
     }),
   ]);
   return { total, signInsToday, failedToday, changesToday };

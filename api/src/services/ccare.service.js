@@ -92,16 +92,44 @@ export async function getActiveById(id) {
 }
 
 /** List accounts for the CCare page, newest first, optional name/staff search. */
-export async function list({ search = '', limit = 1000 } = {}) {
+export async function list({ search = '', page = 1, pageSize = 50 } = {}) {
   ensureEnabled();
   const where = search
-    ? `WHERE Name LIKE :like OR Name_la LIKE :like OR Staffid LIKE :like OR Division LIKE :like OR POSITION LIKE :like`
+    ? `WHERE Name LIKE :like OR Name_la LIKE :like OR Staffid LIKE :like OR Division LIKE :like OR [POSITION] LIKE :like`
     : '';
-  const [rows] = await sequelize.query(
-    `SELECT TOP (${Number(limit) || 1000}) * FROM ${TABLE} ${where} ORDER BY ID DESC`,
-    { replacements: search ? { like: `%${search.replace(/[%_[]/g, (c) => `[${c}]`)}%` } : {} },
+  const replacements = search ? { like: `%${search.replace(/[%_[]/g, (c) => `[${c}]`)}%` } : {};
+
+  // Headline counts (whole filtered set) for the stat tiles, so they stay
+  // correct no matter which page is shown. An account is active when its
+  // password is a 32-char hash and ANB is not 99 (closed).
+  const [[counts]] = await sequelize.query(
+    `SELECT
+       CAST(COUNT(*) AS int) AS total,
+       CAST(SUM(CASE WHEN LEN(Password) = 32 AND (ANB IS NULL OR ANB <> 99) THEN 1 ELSE 0 END) AS int) AS active,
+       CAST(SUM(CASE WHEN LEN(Password) = 32 AND (ANB IS NULL OR ANB <> 99) AND LOWER(Descrip) = 'admin' THEN 1 ELSE 0 END) AS int) AS managers
+     FROM ${TABLE} ${where}`,
+    { replacements },
   );
-  return rows.map(toPublic);
+
+  const size = Math.min(Math.max(Number(pageSize) || 50, 1), 200);
+  const current = Math.max(Number(page) || 1, 1);
+  const offset = (current - 1) * size;
+  const [rows] = await sequelize.query(
+    `SELECT * FROM ${TABLE} ${where} ORDER BY ID DESC OFFSET ${offset} ROWS FETCH NEXT ${size} ROWS ONLY`,
+    { replacements },
+  );
+  return {
+    rows: rows.map(toPublic),
+    total: counts.total,
+    page: current,
+    pageSize: size,
+    counts: {
+      total: counts.total,
+      active: counts.active,
+      managers: counts.managers,
+      closed: counts.total - counts.active,
+    },
+  };
 }
 
 export async function getById(id) {

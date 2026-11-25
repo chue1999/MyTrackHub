@@ -26,12 +26,12 @@ interface Summary {
 useHead({ title: 'CCare activity' })
 const api = useApi()
 const { admin: me } = useAuth()
-if (!(me.value?.role === 'admin' || me.value?.canManage)) await navigateTo('/ccare')
+if (!(me.value?.role === 'admin' || me.value?.canManage)) await navigateTo('/ccare-vas')
 
 const search = ref('')
 const action = ref<string | null>(null)
 const page = ref(1)
-const pageSize = 50
+const pageSize = ref(50)
 
 const { data: summary, refresh: refreshSummary } = await useAsyncData('ccare-log-summary', () =>
   api<Summary>('/ccare/logs/summary'),
@@ -41,9 +41,14 @@ const { data, pending, refresh } = await useAsyncData(
   'ccare-logs',
   () =>
     api<LogPage>('/ccare/logs', {
-      query: { search: search.value || undefined, action: action.value || undefined, page: page.value, pageSize },
+      query: {
+        search: search.value || undefined,
+        action: action.value || undefined,
+        page: page.value,
+        pageSize: pageSize.value,
+      },
     }),
-  { watch: [page] },
+  { watch: [page, pageSize] },
 )
 function reload() {
   refresh()
@@ -60,7 +65,24 @@ watch([search, action], () => {
 
 const rows = computed(() => data.value?.rows ?? [])
 const total = computed(() => data.value?.total ?? 0)
-const pageCount = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
+const headers = [
+  { title: 'Time', key: 'at', sortable: false, width: 160 },
+  { title: 'What happened', key: 'action', sortable: false },
+  { title: 'Details', key: 'details', sortable: false },
+  { title: 'By', key: 'by', sortable: false, width: 120 },
+]
+
+/** Click a name to see only that user's history (newest first). */
+function filterUser(name: string) {
+  search.value = name
+  action.value = null
+  page.value = 1
+}
+
+/** Click a row to open the full entry on its own page. */
+function openRow(_e: unknown, { item }: { item: LogRow }) {
+  navigateTo(`/ccare-log/${item.id}`)
+}
 const tiles = computed(() => [
   { label: 'Total entries', value: summary.value?.total ?? 0, icon: 'mdi-clipboard-text-clock-outline', tone: 'teal' },
   { label: 'Sign-ins today', value: summary.value?.signInsToday ?? 0, icon: 'mdi-login-variant', tone: 'green' },
@@ -90,6 +112,7 @@ const LABELS: Record<string, string> = {
   account_reopen: 'Account reopened',
   password_reset_by_admin: 'Password reset by admin',
   import: 'Accounts imported',
+  vas: 'Vas Service',
 }
 const ICONS: Record<string, string> = {
   login_ok: 'mdi-login-variant',
@@ -106,9 +129,12 @@ const ICONS: Record<string, string> = {
   account_update: 'mdi-account-edit-outline',
   account_close: 'mdi-account-cancel-outline',
   account_reopen: 'mdi-account-check-outline',
+  vas: 'mdi-cellphone-cog',
 }
 const label = (a: string) => LABELS[a] ?? a
 const icon = (a: string) => ICONS[a] ?? 'mdi-circle-small'
+const shortDate = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 function actionColor(a: string) {
   if (a.includes('fail') || a.includes('close') || a.includes('blocked') || a.includes('expired')) return 'error'
   if (a === 'login_ok' || a === 'account_create' || a.includes('reset') || a.includes('reopen')) return 'success'
@@ -125,7 +151,7 @@ const detailText = (d: Record<string, unknown> | null) =>
 
 <template>
   <div>
-    <div class="d-flex flex-wrap align-center ga-3 mb-5">
+    <div class="d-flex flex-wrap align-center ga-3 mb-6">
       <div>
         <h1 class="page-title">CCare activity</h1>
         <div class="text-body-2 text-medium-emphasis">Every sign-in, code and account change</div>
@@ -169,56 +195,90 @@ const detailText = (d: Record<string, unknown> | null) =>
           placeholder="Search name or admin…"
           style="max-width: 280px"
         />
+        <v-chip
+          v-if="search"
+          size="small"
+          color="primary"
+          variant="tonal"
+          closable
+          prepend-icon="mdi-account-search-outline"
+          @click:close="search = ''"
+        >
+          {{ search }}
+        </v-chip>
         <v-spacer />
         <span class="text-caption text-medium-emphasis">{{ total.toLocaleString() }} entries</span>
       </div>
 
       <v-divider />
 
-      <v-table hover density="comfortable">
-        <thead>
-          <tr>
-            <th style="width: 160px">Time</th>
-            <th style="width: 220px">Action</th>
-            <th>Account</th>
-            <th>By</th>
-            <th>Details</th>
-            <th style="width: 120px">IP</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="r in rows" :key="r.id">
-            <td class="text-no-wrap text-caption">{{ formatDateTime(r.at) }}</td>
-            <td>
-              <v-chip size="small" :color="actionColor(r.action)" variant="tonal" :prepend-icon="icon(r.action)">
-                {{ label(r.action) }}
-              </v-chip>
-            </td>
-            <td class="font-weight-medium">{{ r.name || '—' }}</td>
-            <td class="text-medium-emphasis">{{ r.actor || (r.detail?.self ? 'self' : '—') }}</td>
-            <td class="text-caption text-medium-emphasis">{{ detailText(r.detail) }}</td>
-            <td class="text-mono text-caption">{{ r.ip || '' }}</td>
-          </tr>
-          <tr v-if="pending && !rows.length">
-            <td colspan="6" class="text-center py-12"><v-progress-circular indeterminate color="primary" /></td>
-          </tr>
-          <tr v-else-if="!rows.length">
-            <td colspan="6">
-              <div class="empty">
-                <v-icon icon="mdi-clipboard-text-clock-outline" size="40" class="mb-2" />
-                <div class="font-weight-medium">No activity yet</div>
-                <div class="text-caption text-medium-emphasis">
-                  Sign-ins, codes and account changes will appear here as staff use the CCare portal.
-                </div>
+      <v-data-table-server
+        v-model:page="page"
+        v-model:items-per-page="pageSize"
+        :headers="headers"
+        :items="rows"
+        :items-length="total"
+        :loading="pending"
+        :items-per-page-options="[25, 50, 100, 200]"
+        item-value="id"
+        hover
+        density="comfortable"
+        class="cc-log-table"
+        @click:row="openRow"
+      >
+        <template #item.at="{ item }">
+          <div class="py-2">
+            <div class="text-body-2 font-weight-bold text-mono">{{ formatTime(item.at) }}</div>
+            <div class="text-caption text-medium-emphasis">{{ shortDate(item.at) }}</div>
+          </div>
+        </template>
+        <template #item.action="{ item }">
+          <div class="d-flex align-center ga-3 py-2">
+            <v-avatar :color="actionColor(item.action)" variant="tonal" rounded="lg" size="34">
+              <v-icon :icon="icon(item.action)" size="18" />
+            </v-avatar>
+            <div style="min-width: 0">
+              <div class="text-body-2 font-weight-bold">{{ label(item.action) }}</div>
+              <div class="text-caption">
+                <NuxtLink
+                  v-if="item.ccareUserId"
+                  :to="`/ccare-user/${item.ccareUserId}`"
+                  class="name-link"
+                  title="Open this user"
+                  @click.stop
+                >
+                  {{ item.name }}
+                </NuxtLink>
+                <button
+                  v-else-if="item.name"
+                  class="name-link"
+                  title="See only this user"
+                  @click.stop="filterUser(item.name)"
+                >
+                  {{ item.name }}
+                </button>
+                <span v-else class="text-medium-emphasis">—</span>
               </div>
-            </td>
-          </tr>
-        </tbody>
-      </v-table>
-
-      <div v-if="pageCount > 1" class="d-flex justify-center pa-3">
-        <v-pagination v-model="page" :length="pageCount" :total-visible="6" density="comfortable" />
-      </div>
+            </div>
+          </div>
+        </template>
+        <template #item.details="{ item }">
+          <div class="text-caption text-medium-emphasis" style="max-width: 360px">{{ detailText(item.detail) }}</div>
+          <div v-if="item.ip" class="text-caption text-medium-emphasis text-mono">{{ item.ip }}</div>
+        </template>
+        <template #item.by="{ item }">
+          <span class="text-caption text-medium-emphasis">{{ item.actor || (item.detail?.self ? 'self' : '—') }}</span>
+        </template>
+        <template #no-data>
+          <div class="empty">
+            <v-icon icon="mdi-clipboard-text-clock-outline" size="40" class="mb-2" />
+            <div class="font-weight-medium">No activity yet</div>
+            <div class="text-caption text-medium-emphasis">
+              Sign-ins, codes and account changes will appear here as staff use the CCare portal.
+            </div>
+          </div>
+        </template>
+      </v-data-table-server>
     </v-card>
   </div>
 </template>
@@ -282,5 +342,28 @@ const detailText = (d: Record<string, unknown> | null) =>
   text-align: center;
   padding: 48px 16px;
   color: rgba(var(--v-theme-on-surface), 0.7);
+}
+.detail-json {
+  margin: 0;
+  padding: 12px;
+  border-radius: 10px;
+  font-family: Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: rgba(var(--v-theme-on-surface), 0.05);
+  max-height: 240px;
+  overflow: auto;
+}
+.name-link {
+  font-weight: 600;
+  color: #d97706;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.name-link:hover {
+  text-decoration: underline;
 }
 </style>

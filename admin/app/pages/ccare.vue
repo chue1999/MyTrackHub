@@ -10,31 +10,57 @@ useHead({ title: 'CCare accounts' })
 const api = useApi()
 const { admin: me } = useAuth()
 const canManage = computed(() => me.value?.role === 'admin' || me.value?.canManage === true)
+// Managing accounts is for CCare administrators / MyTPlus admins only.
+if (!canManage.value) await navigateTo('/ccare-vas')
+
+interface CcarePage {
+  rows: CcareUser[]
+  total: number
+  page: number
+  pageSize: number
+  counts: { total: number; active: number; managers: number; closed: number }
+}
 
 const search = ref('')
+const page = ref(1)
+const pageSize = ref(50)
 const { data, pending, refresh, error } = await useAsyncData(
   'ccare-users',
-  () => api<CcareUser[]>('/ccare/users', { query: { search: search.value || undefined } }),
-  { watch: [] },
+  () =>
+    api<CcarePage>('/ccare/users', {
+      query: { search: search.value || undefined, page: page.value, pageSize: pageSize.value },
+    }),
+  { watch: [page, pageSize] },
 )
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 watch(search, () => {
   clearTimeout(searchTimer)
-  searchTimer = setTimeout(() => refresh(), 300)
+  searchTimer = setTimeout(() => {
+    page.value = 1
+    refresh()
+  }, 300)
 })
-const users = computed(() => data.value ?? [])
+const users = computed(() => data.value?.rows ?? [])
+const total = computed(() => data.value?.total ?? 0)
+const headers = computed(() => [
+  { title: 'Staff', key: 'name', sortable: false },
+  { title: 'Staff ID', key: 'staffId', sortable: false },
+  { title: 'Division / Position', key: 'division', sortable: false },
+  { title: 'Phone', key: 'staffTel', sortable: false },
+  { title: 'Role', key: 'role', sortable: false },
+  { title: 'Status', key: 'active', sortable: false },
+  ...(canManage.value ? [{ title: '', key: 'actions', sortable: false, align: 'end' as const, width: 150 }] : []),
+])
+function openUser(_e: unknown, { item }: { item: CcareUser }) {
+  navigateTo(`/ccare-user/${item.id}`)
+}
 const stats = computed(() => {
-  const list = users.value
+  const c = data.value?.counts ?? { total: 0, active: 0, managers: 0, closed: 0 }
   return [
-    { label: 'Staff', value: list.length, icon: 'mdi-account-group-outline', tone: 'teal' },
-    { label: 'Active', value: list.filter((u) => u.active).length, icon: 'mdi-account-check-outline', tone: 'green' },
-    {
-      label: 'CCare admins',
-      value: list.filter((u) => u.canManage).length,
-      icon: 'mdi-shield-crown-outline',
-      tone: 'amber',
-    },
-    { label: 'Closed', value: list.filter((u) => !u.active).length, icon: 'mdi-account-cancel-outline', tone: 'red' },
+    { label: 'Staff', value: c.total, icon: 'mdi-account-group-outline', tone: 'teal' },
+    { label: 'Active', value: c.active, icon: 'mdi-account-check-outline', tone: 'green' },
+    { label: 'CCare admins', value: c.managers, icon: 'mdi-shield-crown-outline', tone: 'amber' },
+    { label: 'Closed', value: c.closed, icon: 'mdi-account-cancel-outline', tone: 'red' },
   ]
 })
 
@@ -184,7 +210,8 @@ function toast(text: string, color = 'success') {
         <h1 class="page-title">CCare accounts</h1>
         <div class="text-body-2 text-medium-emphasis">Staff who can log in to My CCare</div>
       </div>
-      <v-spacer />
+    </div>
+    <div class="d-flex flex-wrap align-center ga-3 mb-5">
       <v-text-field
         v-model="search"
         density="compact"
@@ -197,6 +224,7 @@ function toast(text: string, color = 'success') {
         placeholder="Search name, staff ID, division…"
         style="max-width: 320px"
       />
+      <v-spacer />
       <v-btn
         v-if="canManage"
         color="primary"
@@ -227,75 +255,74 @@ function toast(text: string, color = 'success') {
     />
 
     <v-card class="bordered">
-      <v-table hover>
-        <thead>
-          <tr>
-            <th>Staff</th>
-            <th>Staff ID</th>
-            <th>Division / Position</th>
-            <th>Phone</th>
-            <th>Role</th>
-            <th>Status</th>
-            <th v-if="canManage" class="text-end" style="width: 150px"></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="u in users" :key="u.id">
-            <td class="py-2">
-              <div class="d-flex align-center ga-3">
-                <v-avatar :color="u.canManage ? 'primary' : 'grey'" variant="tonal" size="36">
-                  <span class="font-weight-bold">{{ (u.nameLa || u.name)[0]?.toUpperCase() }}</span>
-                </v-avatar>
-                <div>
-                  <div class="font-weight-medium">{{ u.nameLa || u.name }}</div>
-                  <div class="text-caption text-medium-emphasis text-mono">{{ u.name }}</div>
-                </div>
-              </div>
-            </td>
-            <td class="text-mono">{{ u.staffId || '—' }}</td>
-            <td>
-              <div>{{ u.division || '—' }}</div>
-              <div class="text-caption text-medium-emphasis">{{ u.position || '' }}</div>
-            </td>
-            <td class="text-mono">{{ u.staffTel || '—' }}</td>
-            <td>
-              <v-chip
-                size="small"
-                :color="u.canManage ? 'primary' : undefined"
-                variant="tonal"
-                :prepend-icon="u.canManage ? 'mdi-shield-crown-outline' : 'mdi-account-outline'"
-              >
-                {{ u.canManage ? 'CCare admin' : 'Staff' }}
-              </v-chip>
-            </td>
-            <td>
-              <v-chip size="small" :color="u.active ? 'success' : 'error'" variant="tonal">
-                {{ u.active ? 'Active' : 'Closed' }}
-              </v-chip>
-            </td>
-            <td v-if="canManage" class="text-end text-no-wrap">
-              <v-btn icon="mdi-pencil-outline" variant="text" size="small" title="Edit" @click="openEdit(u)" />
-              <v-btn icon="mdi-lock-reset" variant="text" size="small" title="Reset password" @click="openReset(u)" />
-              <v-btn
-                :icon="u.active ? 'mdi-account-cancel-outline' : 'mdi-account-check-outline'"
-                variant="text"
-                size="small"
-                :color="u.active ? 'error' : 'success'"
-                :title="u.active ? 'Close account' : 'Reopen account'"
-                @click="toggleActive(u)"
-              />
-            </td>
-          </tr>
-          <tr v-if="pending && !users.length">
-            <td :colspan="canManage ? 7 : 6" class="text-center py-8">
-              <v-progress-circular indeterminate color="primary" />
-            </td>
-          </tr>
-          <tr v-else-if="!users.length">
-            <td :colspan="canManage ? 7 : 6" class="text-center py-8 text-medium-emphasis">No accounts found.</td>
-          </tr>
-        </tbody>
-      </v-table>
+      <v-data-table-server
+        v-model:page="page"
+        v-model:items-per-page="pageSize"
+        :headers="headers"
+        :items="users"
+        :items-length="total"
+        :loading="pending"
+        :items-per-page-options="[10, 20, 50, 100]"
+        item-value="id"
+        hover
+        density="comfortable"
+        class="cc-accounts-table"
+        @click:row="openUser"
+      >
+        <template #item.name="{ item }">
+          <div class="d-flex align-center ga-3 py-2" style="cursor: pointer">
+            <v-avatar :color="item.canManage ? 'primary' : 'grey'" variant="tonal" size="36">
+              <span class="text-body-2 font-weight-bold">{{ (item.nameLa || item.name)[0]?.toUpperCase() }}</span>
+            </v-avatar>
+            <div style="min-width: 0">
+              <div class="font-weight-medium text-truncate">{{ item.nameLa || item.name }}</div>
+              <div class="text-caption text-medium-emphasis text-mono">{{ item.name }}</div>
+            </div>
+          </div>
+        </template>
+        <template #item.staffId="{ item }">
+          <span class="text-mono">{{ item.staffId || '—' }}</span>
+        </template>
+        <template #item.division="{ item }">
+          <div>{{ item.division || '—' }}</div>
+          <div class="text-caption text-medium-emphasis">{{ item.position || '' }}</div>
+        </template>
+        <template #item.staffTel="{ item }">
+          <span class="text-mono">{{ item.staffTel || '—' }}</span>
+        </template>
+        <template #item.role="{ item }">
+          <v-chip
+            size="small"
+            :color="item.canManage ? 'primary' : undefined"
+            variant="tonal"
+            :prepend-icon="item.canManage ? 'mdi-shield-crown-outline' : 'mdi-account-outline'"
+          >
+            {{ item.canManage ? 'CCare admin' : 'Staff' }}
+          </v-chip>
+        </template>
+        <template #item.active="{ item }">
+          <v-chip size="small" :color="item.active ? 'success' : 'error'" variant="tonal">
+            {{ item.active ? 'Active' : 'Closed' }}
+          </v-chip>
+        </template>
+        <template #item.actions="{ item }">
+          <div class="text-no-wrap" @click.stop>
+            <v-btn icon="mdi-pencil-outline" variant="text" size="small" title="Edit" @click="openEdit(item)" />
+            <v-btn icon="mdi-lock-reset" variant="text" size="small" title="Reset password" @click="openReset(item)" />
+            <v-btn
+              :icon="item.active ? 'mdi-account-cancel-outline' : 'mdi-account-check-outline'"
+              variant="text"
+              size="small"
+              :color="item.active ? 'error' : 'success'"
+              :title="item.active ? 'Close account' : 'Reopen account'"
+              @click="toggleActive(item)"
+            />
+          </div>
+        </template>
+        <template #no-data>
+          <div class="py-8 text-medium-emphasis">No accounts found</div>
+        </template>
+      </v-data-table-server>
     </v-card>
 
     <!-- create / edit -->
@@ -412,6 +439,15 @@ function toast(text: string, color = 'success') {
 </template>
 
 <style scoped>
+.user-link {
+  font-weight: 600;
+  color: rgb(var(--v-theme-on-surface));
+  text-decoration: none;
+}
+.user-link:hover {
+  color: #d97706;
+  text-decoration: underline;
+}
 .cc-tiles {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

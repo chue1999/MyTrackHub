@@ -82,9 +82,11 @@ const schema = z.object({
   // when SMS is unconfigured the code is returned to the caller instead (dev only).
   OTP_TEST_NUMBERS: z.string().default(''),
 
-  // CCare login source. 'proxy' delegates to the existing My CCare auth API
-  // (password + OTP exactly as the current web); 'local' uses our own md5 + SMS.
-  CCARE_AUTH_MODE: z.enum(['proxy', 'local']).default('proxy'),
+  // CCare login source:
+  //   proxy  → the existing My CCare API only (real accounts; our own won't work)
+  //   local  → our own md5 + SMS only (MyTPlus-created accounts)
+  //   hybrid → try the My CCare API first, fall back to our own md5 (both work)
+  CCARE_AUTH_MODE: z.enum(['proxy', 'local', 'hybrid']).default('hybrid'),
   CCARE_AUTH_URL: z.string().default('http://10.30.6.94:5151'),
   CCARE_LOGIN_PATH: z.string().default('/api/8'),
   CCARE_VERIFY_PATH: z.string().default('/api/9'),

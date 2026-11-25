@@ -117,18 +117,33 @@ async function issueCode({ user, purpose, action, ip }) {
   return out;
 }
 
-const PROXY = config.ccareAuth.mode === 'proxy';
+const MODE = config.ccareAuth.mode; // 'proxy' | 'local' | 'hybrid'
+const USES_PROXY = MODE === 'proxy' || MODE === 'hybrid';
+const USES_LOCAL = MODE === 'local' || MODE === 'hybrid';
 
 /** What the sign-in portal may offer, given the auth mode. */
 export function portalConfig() {
-  // In proxy mode passwords live in the My CCare system, so we can't create
-  // accounts or reset passwords here (our hash would not match theirs).
-  return { mode: config.ccareAuth.mode, canRegister: !PROXY, canReset: !PROXY };
+  // New accounts are created by a CCare administrator in the admin, never by
+  // self-registration on the public sign-in page. Password reset stays available
+  // when we own the password (local / hybrid).
+  return { mode: MODE, canRegister: false, canReset: USES_LOCAL };
 }
 
-/** Step 1 of sign-in: name + password → send a code. */
+/**
+ * Step 1 of sign-in: name + password → send a code.
+ * hybrid: try the My CCare API first (real accounts keep their password); if it
+ * rejects the credentials, fall back to our own md5 (MyTPlus-created accounts).
+ */
 export async function startLogin({ name, password, ip }) {
-  if (PROXY) return startLoginProxy({ name, password, ip });
+  if (USES_PROXY) {
+    try {
+      return await startLoginProxy({ name, password, ip });
+    } catch (err) {
+      const status = err?.status ?? 0;
+      // Only fall back for wrong credentials (401) or an unreachable gateway (502).
+      if (!USES_LOCAL || (status !== 401 && status !== 502)) throw err;
+    }
+  }
   const user = await ccare.verifyLogin(name, password); // throws 403 if the account is closed
   if (!user) {
     await logCcare({ name, action: 'login_fail', success: false, ip });
@@ -230,7 +245,7 @@ async function verifyLoginProxy({ challenge, code, ip }) {
 
 /** Forgot password, step 1: name → send a code (never reveals whether the name exists). */
 export async function startForgot({ name, ip }) {
-  if (PROXY) {
+  if (!USES_LOCAL) {
     throw HttpError.badRequest('Password reset is handled in the My CCare system. Please ask an administrator.');
   }
   const user = await ccare.getByName(name);

@@ -42,14 +42,44 @@ onMounted(async () => {
 
 const isCcare = computed(() => admin.value?.kind === 'ccare')
 const canManageCcare = computed(() => admin.value?.role === 'admin' || admin.value?.canManage === true)
-const ccareItem = { title: 'CCare accounts', icon: 'mdi-headset', activeIcon: 'mdi-headset', to: '/ccare' }
-const ccareLogItem = {
-  title: 'CCare activity',
-  icon: 'mdi-clipboard-text-clock-outline',
-  activeIcon: 'mdi-clipboard-text-clock',
-  to: '/ccare-logs',
-}
-const ccareNav = computed(() => (canManageCcare.value ? [ccareItem, ccareLogItem] : [ccareItem]))
+
+// CCare lives as its own sidebar pages. Managers get all three; plain staff just
+// the Service console. Each has its own active matcher so only one highlights.
+const ccareNav = computed(() =>
+  canManageCcare.value
+    ? [
+        {
+          title: 'CCare service',
+          icon: 'mdi-cellphone-cog',
+          activeIcon: 'mdi-cellphone-cog',
+          to: '/ccare-vas',
+          active: (p: string) => p.startsWith('/ccare-vas'),
+        },
+        {
+          title: 'CCare accounts',
+          icon: 'mdi-account-group-outline',
+          activeIcon: 'mdi-account-group',
+          to: '/ccare',
+          active: (p: string) => p === '/ccare' || p.startsWith('/ccare-user'),
+        },
+        {
+          title: 'CCare activity',
+          icon: 'mdi-clipboard-text-clock-outline',
+          activeIcon: 'mdi-clipboard-text-clock',
+          to: '/ccare-logs',
+          active: (p: string) => p.startsWith('/ccare-logs'),
+        },
+      ]
+    : [
+        {
+          title: 'CCare service',
+          icon: 'mdi-headset',
+          activeIcon: 'mdi-headset',
+          to: '/ccare-vas',
+          active: (p: string) => p.startsWith('/ccare'),
+        },
+      ],
+)
 
 // CCare staff see only the CCare pages; MyTPlus admins see everything plus CCare.
 const nav = computed(() =>
@@ -89,9 +119,16 @@ const adminNav = computed(() =>
       ],
 )
 const roleLabel = computed(() =>
-  isCcare.value ? 'CCare staff' : admin.value?.role === 'admin' ? 'Administrator' : 'Viewer',
+  isCcare.value
+    ? canManageCcare.value
+      ? 'CCare admin'
+      : 'CCare staff'
+    : admin.value?.role === 'admin'
+      ? 'Administrator'
+      : 'Viewer',
 )
-const isActive = (to: string) => (to === '/' ? route.path === '/' : route.path.startsWith(to))
+const isActive = (item: { to: string; active?: (p: string) => boolean }) =>
+  item.active ? item.active(route.path) : item.to === '/' ? route.path === '/' : route.path.startsWith(item.to)
 
 const displayName = computed(() => admin.value?.displayName || admin.value?.username || '')
 </script>
@@ -100,25 +137,22 @@ const displayName = computed(() => admin.value?.displayName || admin.value?.user
   <v-layout class="app-shell">
     <v-navigation-drawer v-model="drawer" :permanent="mdAndUp" width="260" class="sidebar" theme="dark">
       <div class="brand">
-        <div class="brand-logo" :class="{ custom: branding.logo }">
-          <BrandMark size="24" />
+        <div class="brand-logo" :class="{ custom: branding.logo && !isCcare }">
+          <v-icon v-if="isCcare" icon="mdi-headset" size="24" color="#1a1a1a" />
+          <BrandMark v-else size="24" />
         </div>
         <div style="min-width: 0">
-          <div class="brand-name">{{ branding.name }}</div>
-          <div v-if="branding.subtitle" class="brand-sub">{{ branding.subtitle }}</div>
+          <div class="brand-name">{{ isCcare ? 'My CCare' : branding.name }}</div>
+          <div v-if="isCcare || branding.subtitle" class="brand-sub">
+            {{ isCcare ? 'Customer Care' : branding.subtitle }}
+          </div>
         </div>
       </div>
 
       <div class="nav-label">Overview</div>
       <nav class="nav">
-        <NuxtLink
-          v-for="item in nav"
-          :key="item.to"
-          :to="item.to"
-          class="nav-item"
-          :class="{ active: isActive(item.to) }"
-        >
-          <v-icon :icon="isActive(item.to) ? item.activeIcon : item.icon" size="20" />
+        <NuxtLink v-for="item in nav" :key="item.to" :to="item.to" class="nav-item" :class="{ active: isActive(item) }">
+          <v-icon :icon="isActive(item) ? item.activeIcon : item.icon" size="20" />
           <span>{{ item.title }}</span>
         </NuxtLink>
       </nav>
@@ -131,9 +165,9 @@ const displayName = computed(() => admin.value?.displayName || admin.value?.user
             :key="item.to"
             :to="item.to"
             class="nav-item"
-            :class="{ active: isActive(item.to) }"
+            :class="{ active: isActive(item) }"
           >
-            <v-icon :icon="isActive(item.to) ? item.activeIcon : item.icon" size="20" />
+            <v-icon :icon="isActive(item) ? item.activeIcon : item.icon" size="20" />
             <span>{{ item.title }}</span>
           </NuxtLink>
         </nav>

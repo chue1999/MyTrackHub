@@ -4,6 +4,8 @@ const text = (max) => z.string().trim().max(max).optional();
 
 export const listQuery = z.object({
   search: z.string().trim().max(100).optional().default(''),
+  page: z.coerce.number().int().min(1).optional().default(1),
+  pageSize: z.coerce.number().int().min(1).max(200).optional().default(50),
 });
 
 /** Profile fields shared by create and the "Create account" form on the login page. */
@@ -52,10 +54,18 @@ export const ccareResetSchema = z.object({
   newPassword: z.string().min(4, 'Password must be at least 4 characters').max(40),
 });
 
+// ── Vas Service console (operations are logged; telecom wiring comes later) ──
+export const vasSubmitSchema = z.object({
+  group: z.enum(['action', 'code', 'package', 'kyc']),
+  operation: z.string().trim().min(1).max(80),
+  fields: z.record(z.string(), z.string().max(120)).optional().default({}),
+});
+
 // ── CCare activity log ──
 export const logsQuery = z.object({
   search: z.string().trim().max(100).optional().default(''),
   action: z.string().trim().max(40).optional(),
+  userId: z.coerce.number().int().positive().optional(),
   page: z.coerce.number().int().min(1).optional().default(1),
   pageSize: z.coerce.number().int().min(1).max(200).optional().default(50),
 });

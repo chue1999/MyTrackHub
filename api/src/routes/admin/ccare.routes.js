@@ -10,6 +10,7 @@ import {
   resetPasswordSchema,
   setActiveSchema,
   updateSchema,
+  vasSubmitSchema,
 } from '../../validators/ccare.validator.js';
 
 /**
@@ -20,10 +21,14 @@ const router = Router();
 
 router.get('/users', validate({ query: listQuery }), asyncHandler(ccareController.list));
 router.get('/users/:id', asyncHandler(ccareController.get));
+// Vas Service operations: any signed-in CCare member (and admins) may run them.
+router.post('/vas/submit', validate({ body: vasSubmitSchema }), asyncHandler(ccareController.vasSubmit));
 
 router.use(requireCcareManage);
+router.get('/users/:id/detail', asyncHandler(ccareController.detail));
 router.get('/logs', validate({ query: logsQuery }), asyncHandler(ccareController.logs));
 router.get('/logs/summary', asyncHandler(ccareController.logSummary));
+router.get('/logs/:id', asyncHandler(ccareController.logDetail));
 router.get('/log-actions', asyncHandler(ccareController.logActions));
 router.post('/users', validate({ body: createSchema }), asyncHandler(ccareController.create));
 router.patch('/users/:id', validate({ body: updateSchema }), asyncHandler(ccareController.update));
