@@ -31,5 +31,12 @@ export function errorHandler(err, req, res, _next) {
     return res.status(413).json({ message: 'Request body is too large', code: 'PAYLOAD_TOO_LARGE' });
   }
   (req.log ?? logger).error({ err }, 'Unhandled error');
-  res.status(500).json({ message: 'Server error', code: 'INTERNAL_ERROR' });
+  // MyTPlus administrators see the real reason (e.g. a database error) to fix
+  // it quickly; everyone else only gets the generic message.
+  const isAdmin = req.me?.kind === 'admin' && req.me?.role === 'admin';
+  const reason = err?.original?.message || err?.parent?.message || err?.message;
+  res.status(500).json({
+    message: isAdmin && reason ? `Server error: ${String(reason).slice(0, 300)}` : 'Server error',
+    code: 'INTERNAL_ERROR',
+  });
 }
