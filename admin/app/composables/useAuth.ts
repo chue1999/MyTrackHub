@@ -5,6 +5,9 @@ export interface OtpChallenge {
   phoneHint: string
   length: number
   devCode?: string
+  /** Sign-in only: when the password expires, and how many days are left. */
+  passwordExpiresAt?: string | null
+  passwordDaysLeft?: number | null
 }
 
 /** Admin login state, kept in cookies so it survives a page reload. */

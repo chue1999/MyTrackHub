@@ -10,6 +10,7 @@ import {
   userSummary,
 } from '../services/ccare-log.service.js';
 import { assertCanText, deliverPassword } from '../services/ccare-auth.service.js';
+import { passwordStatus } from '../services/ccare-password-policy.service.js';
 import { HttpError } from '../utils/http-error.js';
 import { generatePassword } from '../utils/password.js';
 import * as ccare from '../services/ccare.service.js';
@@ -28,7 +29,10 @@ const audit = (req, action, user, detail) =>
 
 /** GET /ccare/users?search= */
 export async function list(req, res) {
-  res.json(await ccare.list(req.validatedQuery));
+  const page = await ccare.list(req.validatedQuery);
+  // When each password expires (30-day rule), for the "Password" column.
+  page.rows = await Promise.all(page.rows.map(async (u) => ({ ...u, password: await passwordStatus(u) })));
+  res.json(page);
 }
 
 /** GET /ccare/users/:id */
@@ -40,7 +44,7 @@ export async function get(req, res) {
 export async function detail(req, res) {
   const id = Number(req.params.id);
   const [user, s] = await Promise.all([ccare.getById(id), userSummary(id)]);
-  res.json({ user, summary: s });
+  res.json({ user: { ...user, password: await passwordStatus(user) }, summary: s });
 }
 
 /**

@@ -70,6 +70,7 @@ const pageCount = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
 const { data: actions } = await useAsyncData('ccare-log-actions', () => api<string[]>('/ccare/log-actions'))
 
 const LABELS: Record<string, string> = {
+  password_expired: 'Password expired (sign-in refused)',
   password_sent: 'Password sent by SMS',
   login_start: 'Sign-in started',
   otp_sent: 'Code sent',
@@ -98,6 +99,7 @@ const LABELS: Record<string, string> = {
   sql_delete: 'SQL delete run',
 }
 const ICONS: Record<string, string> = {
+  password_expired: 'mdi-lock-clock',
   password_sent: 'mdi-message-lock-outline',
   login_ok: 'mdi-login-variant',
   login_start: 'mdi-account-key-outline',

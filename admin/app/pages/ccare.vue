@@ -49,6 +49,7 @@ const headers = computed(() => [
   { title: 'Phone', key: 'staffTel', sortable: false },
   { title: 'Role', key: 'role', sortable: false },
   { title: 'Status', key: 'active', sortable: false },
+  { title: 'Password', key: 'password', sortable: false },
   ...(canManage.value ? [{ title: '', key: 'actions', sortable: false, align: 'end' as const, width: 150 }] : []),
 ])
 function openUser(_e: unknown, { item }: { item: CcareUser }) {
@@ -293,6 +294,28 @@ function toast(text: string, color = 'success') {
         </template>
         <template #item.staffTel="{ item }">
           <span class="text-mono">{{ item.staffTel || '—' }}</span>
+        </template>
+        <template #item.password="{ item }">
+          <template v-if="item.password?.expiresAt && item.active">
+            <v-chip
+              v-if="item.password.expired"
+              size="small"
+              color="error"
+              variant="tonal"
+              prepend-icon="mdi-lock-clock"
+              :title="`Expired ${formatDateTime(item.password.expiresAt)} — send a new password or use Forgot password`"
+              >Expired</v-chip
+            >
+            <v-chip
+              v-else
+              size="small"
+              :color="(item.password.daysLeft ?? 99) <= 7 ? 'warning' : 'success'"
+              variant="tonal"
+              :title="`Expires ${formatDateTime(item.password.expiresAt)}`"
+              >{{ item.password.daysLeft }} day(s) left</v-chip
+            >
+          </template>
+          <span v-else class="text-medium-emphasis">—</span>
         </template>
         <template #item.role="{ item }">
           <v-chip

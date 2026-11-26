@@ -48,6 +48,8 @@ function toPublic(row) {
     staffTel: row.stafftel,
     roleCrm: row.role_CRM,
     cdate: row.cdate,
+    // When the password was last set (for the 30-day expiry).
+    passwordChangedAt: row.TimeResetPassWord ?? row.cdate ?? null,
     active: isActive(row),
     canManage: isActive(row) && (row.Descrip || '').toLowerCase() === 'admin',
   };
@@ -214,6 +216,7 @@ export async function create(data) {
       Status: data.descrip === 'Admin' ? '3' : '2',
       Name_la: clean(data.nameLa),
       ANB: 56,
+      TimeResetPassWord: new Date(),
       BrandID: clean(data.brandId) ?? '',
       Division: clean(data.division),
       POSITION: clean(data.position),
@@ -233,9 +236,9 @@ export async function create(data) {
       });
       await sequelize.query(
         `INSERT INTO ${TABLE}
-         (ID, Name, Password, Descrip, Status, cdate, Name_la, ANB, BrandID, Division, [POSITION], Staffid, stafftel, role_CRM)
+         (ID, Name, Password, Descrip, Status, cdate, TimeResetPassWord, Name_la, ANB, BrandID, Division, [POSITION], Staffid, stafftel, role_CRM)
        VALUES
-         (:id, :name, :password, :descrip, :status, SYSDATETIME(), :nameLa, :anb, :brandId, :division, :position, :staffId, :staffTel, :roleCrm)`,
+         (:id, :name, :password, :descrip, :status, SYSDATETIME(), SYSDATETIME(), :nameLa, :anb, :brandId, :division, :position, :staffId, :staffTel, :roleCrm)`,
         {
           transaction,
           replacements: {

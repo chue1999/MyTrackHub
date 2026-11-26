@@ -95,6 +95,8 @@ const schema = z.object({
   // After this many seconds without a heartbeat an agent is shown as silent.
   SERVER_AGENT_STALE_SECONDS: z.coerce.number().int().positive().default(180),
 
+  // CCare passwords expire this many days after they were set (0 = never).
+  CCARE_PASSWORD_MAX_AGE_DAYS: z.coerce.number().int().min(0).max(3650).default(30),
   CCARE_AUTH_MODE: z.enum(['proxy', 'local', 'hybrid']).default('hybrid'),
   CCARE_AUTH_URL: z.string().default('http://10.30.6.94:5151'),
   CCARE_LOGIN_PATH: z.string().default('/api/8'),
@@ -168,6 +170,8 @@ export const config = Object.freeze({
       .map((s) => s.trim())
       .filter(Boolean),
   }),
+
+  ccarePasswordMaxAgeDays: env.CCARE_PASSWORD_MAX_AGE_DAYS,
 
   serverAgent: Object.freeze({ key: env.SERVER_AGENT_KEY, staleMs: env.SERVER_AGENT_STALE_SECONDS * 1000 }),
 

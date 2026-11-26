@@ -101,6 +101,9 @@ export interface CcareUser {
   cdate: string | null
   active: boolean
   canManage: boolean
+  passwordChangedAt?: string | null
+  /** Password expiry (30-day rule), sent by the list/detail endpoints. */
+  password?: { expiresAt: string | null; expired: boolean; daysLeft: number | null; maxAgeDays: number }
 }
 
 /** Website name and logo (Settings page). */

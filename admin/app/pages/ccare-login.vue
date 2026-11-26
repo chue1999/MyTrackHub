@@ -30,6 +30,8 @@ type Step = 'password' | 'otp' | 'register' | 'forgotName' | 'forgotOtp'
 const step = ref<Step>('password')
 const loading = ref(false)
 const error = ref('')
+// Set when sign-in was refused because the password is older than 30 days.
+const expired = ref(false)
 const notice = ref(route.query.reason === 'idle' ? 'You were signed out. Please sign in again.' : '')
 
 const name = ref((route.query.name as string) || '')
@@ -46,6 +48,7 @@ const reg = reactive({ name: '', password: '', nameLa: '', staffId: '', staffTel
 function go(to: Step) {
   step.value = to
   error.value = ''
+  expired.value = false
 }
 
 async function run(fn: () => Promise<void>) {
@@ -55,6 +58,7 @@ async function run(fn: () => Promise<void>) {
     await fn()
   } catch (e) {
     error.value = errorMessage(e, 'Something went wrong. Please try again.')
+    expired.value = (e as { data?: { code?: string } })?.data?.code === 'PASSWORD_EXPIRED'
   } finally {
     loading.value = false
   }
@@ -182,13 +186,20 @@ const features = [
           />
           <v-alert
             v-if="error"
-            type="error"
+            :type="expired ? 'warning' : 'error'"
+            :icon="expired ? 'mdi-lock-clock' : undefined"
             variant="tonal"
             density="compact"
             rounded="lg"
             class="mb-4"
             :text="error"
-          />
+          >
+            <template v-if="expired && canReset" #append>
+              <v-btn size="small" color="warning" variant="flat" class="text-none" @click="go('forgotName')"
+                >Set new password</v-btn
+              >
+            </template>
+          </v-alert>
 
           <Transition name="cc-step" mode="out-in">
             <div :key="step">
@@ -248,6 +259,20 @@ const features = [
                 <p class="cc-lead">
                   We sent a {{ challenge?.length ?? 6 }}-digit code to <b>{{ challenge?.phoneHint }}</b>.
                 </p>
+                <v-alert
+                  v-if="
+                    challenge?.passwordDaysLeft !== undefined &&
+                    challenge?.passwordDaysLeft !== null &&
+                    challenge.passwordDaysLeft <= 7
+                  "
+                  type="warning"
+                  variant="tonal"
+                  density="compact"
+                  rounded="lg"
+                  class="mb-3"
+                  icon="mdi-lock-clock"
+                  :text="`Your password expires in ${challenge.passwordDaysLeft} day(s). After you sign in, change it with “Forgot password” so you are not locked out.`"
+                />
                 <v-alert
                   v-if="challenge?.devCode"
                   type="warning"

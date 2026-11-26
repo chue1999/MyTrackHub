@@ -4,6 +4,7 @@ import { HttpError } from '../utils/http-error.js';
 import { signToken } from '../utils/jwt.js';
 import * as ccare from './ccare.service.js';
 import { logCcare } from './ccare-log.service.js';
+import { passwordStatus } from './ccare-password-policy.service.js';
 import { normalizePhone, sendSms } from './sms.service.js';
 
 /**
@@ -182,6 +183,30 @@ const MODE = ccare.ccareDev ? 'local' : config.ccareAuth.mode; // 'proxy' | 'loc
 const USES_PROXY = MODE === 'proxy' || MODE === 'hybrid';
 const USES_LOCAL = MODE === 'local' || MODE === 'hybrid';
 
+/**
+ * Refuses sign-in when the (correct) password is older than the allowed age.
+ * Returns the expiry info to show a warning when it is close.
+ */
+async function checkExpiry(user, ip) {
+  const status = await passwordStatus(user);
+  if (status.expired) {
+    await logCcare({
+      ccareUserId: user.id,
+      name: user.name,
+      action: 'password_expired',
+      success: false,
+      ip,
+      detail: { expiredAt: status.expiresAt, maxAgeDays: status.maxAgeDays },
+    });
+    throw new HttpError(
+      403,
+      `Your password has expired (passwords must be changed every ${status.maxAgeDays} days). Use "Forgot password" to set a new one with an SMS code.`,
+      'PASSWORD_EXPIRED',
+    );
+  }
+  return { passwordExpiresAt: status.expiresAt, passwordDaysLeft: status.daysLeft };
+}
+
 /** What the sign-in portal may offer, given the auth mode. */
 export function portalConfig() {
   // New accounts are created by a CCare administrator in the admin, never by
@@ -210,7 +235,8 @@ export async function startLogin({ name, password, ip }) {
     await logCcare({ name, action: 'login_fail', success: false, ip });
     throw new HttpError(401, 'Wrong username or password', 'INVALID_CREDENTIALS');
   }
-  return issueCode({ user, purpose: 'login', action: 'login_start', ip });
+  const expiry = await checkExpiry(user, ip);
+  return { ...(await issueCode({ user, purpose: 'login', action: 'login_start', ip })), ...expiry };
 }
 
 /** Step 2 of sign-in: the code → a login token. */
@@ -245,6 +271,8 @@ async function startLoginProxy({ name, password, ip }) {
   }
   // A local profile (phone hint, etc.) is nice-to-have; absence must not block login.
   const profile = await ccare.getByName(name).catch(() => null);
+  // The password is correct (the My CCare API said so): apply the same expiry rule.
+  const expiry = profile ? await checkExpiry(profile, ip) : {};
   const challenge = store({ name, purpose: 'login', mode: 'proxy' });
   await logCcare({
     ccareUserId: profile?.id,
@@ -258,6 +286,7 @@ async function startLoginProxy({ name, password, ip }) {
     challenge,
     phoneHint: profile?.staffTel ? maskPhone(profile.staffTel) : 'your phone',
     length: config.otp.length,
+    ...expiry,
   };
 }
 
