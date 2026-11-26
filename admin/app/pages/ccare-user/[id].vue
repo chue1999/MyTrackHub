@@ -148,6 +148,16 @@ const tiles = computed(() => {
     { label: 'Failed', value: s?.failed ?? 0, icon: 'mdi-alert-circle-outline' },
   ]
 })
+
+// BrandID → "15 · HQ-Saylom-TPL"
+const { data: brands } = await useAsyncData('ccare-brands', () =>
+  useApi()<{ id: string; name: string }[]>('/ccare/brands'),
+)
+function brandLabel(id?: string | null) {
+  if (!id) return '—'
+  const b = brands.value?.find((x) => x.id === String(id))
+  return b ? `${b.id} · ${b.name}` : String(id)
+}
 </script>
 
 <template>
@@ -194,7 +204,7 @@ const tiles = computed(() => {
               title="Position"
               :subtitle="detail.user.position || '—'"
             />
-            <v-list-item prepend-icon="mdi-tag-outline" title="Brand" :subtitle="detail.user.brandId || '—'" />
+            <v-list-item prepend-icon="mdi-tag-outline" title="BrandID" :subtitle="brandLabel(detail.user.brandId)" />
             <v-list-item
               prepend-icon="mdi-clock-outline"
               title="Last activity"

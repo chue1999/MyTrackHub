@@ -65,6 +65,21 @@ const stats = computed(() => {
   ]
 })
 
+// ── branch list for the BrandID dropdown ──
+interface Brand {
+  id: string
+  name: string
+}
+const { data: brands } = await useAsyncData('ccare-brands', () => api<Brand[]>('/ccare/brands'))
+const brandItems = computed(() => {
+  const list = (brands.value ?? []).map((b) => ({ title: `${b.id} · ${b.name}`, value: b.id }))
+  // An older account may hold a BrandID that is not in the list: still show it.
+  if (form.brandId && !list.some((b) => b.value === form.brandId)) {
+    list.unshift({ title: `${form.brandId} · (not in list)`, value: form.brandId })
+  }
+  return list
+})
+
 // ── create / edit ──
 const dialog = ref(false)
 const editing = ref<CcareUser | null>(null)
@@ -75,7 +90,7 @@ const form = reactive({
   staffTel: '',
   division: '',
   position: '',
-  brandId: '',
+  brandId: null as string | null,
   descrip: 'user' as 'user' | 'Admin',
 })
 const saving = ref(false)
@@ -90,7 +105,7 @@ function openCreate() {
     staffTel: '',
     division: '',
     position: '',
-    brandId: '',
+    brandId: null,
     descrip: 'user',
   })
   formError.value = ''
@@ -105,7 +120,7 @@ function openEdit(u: CcareUser) {
     staffTel: u.staffTel ?? '',
     division: u.division ?? '',
     position: u.position ?? '',
-    brandId: u.brandId ?? '',
+    brandId: u.brandId || null,
     descrip: (u.descrip || '').toLowerCase() === 'admin' ? 'Admin' : 'user',
   })
   formError.value = ''
@@ -130,7 +145,7 @@ async function save() {
       staffTel: form.staffTel.trim() || null,
       division: form.division.trim() || null,
       position: form.position.trim() || null,
-      brandId: form.brandId.trim() || null,
+      brandId: form.brandId || null,
       descrip: form.descrip,
     }
     if (editing.value) {
@@ -408,18 +423,31 @@ function toast(text: string, color = 'success') {
               variant="outlined"
               density="comfortable"
             />
+          </div>
+          <v-autocomplete
+            v-model="form.brandId"
+            :items="brandItems"
+            label="BrandID"
+            placeholder="Choose a branch"
+            prepend-inner-icon="mdi-store-marker-outline"
+            variant="outlined"
+            density="comfortable"
+            clearable
+            no-data-text="No branch matches"
+          />
+          <div class="d-flex ga-3">
             <v-text-field
-              v-model="form.brandId"
-              label="Brand"
-              maxlength="3"
+              v-model="form.division"
+              label="Division (optional)"
               variant="outlined"
               density="comfortable"
-              style="max-width: 100px"
             />
-          </div>
-          <div class="d-flex ga-3">
-            <v-text-field v-model="form.division" label="Division" variant="outlined" density="comfortable" />
-            <v-text-field v-model="form.position" label="Position" variant="outlined" density="comfortable" />
+            <v-text-field
+              v-model="form.position"
+              label="Position (optional)"
+              variant="outlined"
+              density="comfortable"
+            />
           </div>
           <v-alert v-if="formError" type="error" variant="tonal" density="compact" :text="formError" />
         </v-card-text>

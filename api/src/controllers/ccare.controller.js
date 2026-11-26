@@ -9,6 +9,7 @@ import {
   summary,
   userSummary,
 } from '../services/ccare-log.service.js';
+import { CCARE_BRANDS } from '../data/ccare-brands.js';
 import { assertCanText, deliverPassword } from '../services/ccare-auth.service.js';
 import { passwordStatus } from '../services/ccare-password-policy.service.js';
 import { HttpError } from '../utils/http-error.js';
@@ -26,6 +27,11 @@ const audit = (req, action, user, detail) =>
     ip: ipOf(req),
     detail,
   });
+
+/** GET /ccare/brands — branch list for the BrandID dropdown. */
+export function brands(_req, res) {
+  res.json(CCARE_BRANDS);
+}
 
 /** GET /ccare/users?search= */
 export async function list(req, res) {

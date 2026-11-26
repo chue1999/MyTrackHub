@@ -1,7 +1,9 @@
 import { z } from 'zod';
+import { CCARE_BRAND_IDS } from '../data/ccare-brands.js';
 import { passwordRule } from '../utils/password.js';
 
-const text = (max) => z.string().trim().max(max).optional();
+// Optional text: missing, null or '' all mean "empty" (the website sends null).
+const text = (max) => z.string().trim().max(max).nullish();
 
 export const listQuery = z.object({
   search: z.string().trim().max(100).optional().default(''),
@@ -11,12 +13,17 @@ export const listQuery = z.object({
 
 /** Profile fields shared by create and the "Create account" form on the login page. */
 const profile = {
-  nameLa: z.string().trim().max(100).optional(),
+  nameLa: text(100),
   staffId: text(15),
   staffTel: text(26),
   division: text(50),
   position: text(50),
-  brandId: z.string().trim().max(3, 'Brand: at most 3 characters').optional(),
+  // A BID from the branch list (data/ccare-brands.js), or empty.
+  brandId: z
+    .union([z.string(), z.number()])
+    .transform((v) => String(v).trim())
+    .refine((v) => v === '' || CCARE_BRAND_IDS.has(v), 'Choose a BrandID from the list')
+    .nullish(),
   roleCrm: text(20),
 };
 

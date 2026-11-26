@@ -185,7 +185,7 @@ export async function getById(id) {
   return toPublic(row);
 }
 
-const clean = (v) => (v === undefined || v === '' ? null : v);
+const clean = (v) => (v === undefined || v === null || v === '' ? null : v);
 
 /** SQL Server rejects a value longer than its column: say which, instead of a 500. */
 function tooLong(err) {
@@ -218,8 +218,8 @@ export async function create(data) {
       ANB: 56,
       TimeResetPassWord: new Date(),
       BrandID: clean(data.brandId) ?? '',
-      Division: clean(data.division),
-      POSITION: clean(data.position),
+      Division: clean(data.division) ?? '',
+      POSITION: clean(data.position) ?? '',
       Staffid: clean(data.staffId),
       stafftel: clean(data.staffTel),
       role_CRM: clean(data.roleCrm),
@@ -250,8 +250,8 @@ export async function create(data) {
             nameLa: clean(data.nameLa),
             anb: 56,
             brandId: clean(data.brandId) ?? '',
-            division: clean(data.division),
-            position: clean(data.position),
+            division: clean(data.division) ?? '',
+            position: clean(data.position) ?? '',
             staffId: clean(data.staffId),
             staffTel: clean(data.staffTel),
             roleCrm: clean(data.roleCrm),
@@ -273,8 +273,8 @@ export async function update(id, data) {
   if (useDev) {
     const patch = {};
     if (data.nameLa !== undefined) patch.Name_la = clean(data.nameLa);
-    if (data.division !== undefined) patch.Division = clean(data.division);
-    if (data.position !== undefined) patch.POSITION = clean(data.position);
+    if (data.division !== undefined) patch.Division = clean(data.division) ?? '';
+    if (data.position !== undefined) patch.POSITION = clean(data.position) ?? '';
     if (data.staffId !== undefined) patch.Staffid = clean(data.staffId);
     if (data.staffTel !== undefined) patch.stafftel = clean(data.staffTel);
     if (data.brandId !== undefined) patch.BrandID = clean(data.brandId) ?? '';
@@ -289,8 +289,8 @@ export async function update(id, data) {
     replacements[key] = value;
   };
   if (data.nameLa !== undefined) field('Name_la', 'nameLa', clean(data.nameLa));
-  if (data.division !== undefined) field('Division', 'division', clean(data.division));
-  if (data.position !== undefined) field('[POSITION]', 'position', clean(data.position));
+  if (data.division !== undefined) field('Division', 'division', clean(data.division) ?? '');
+  if (data.position !== undefined) field('[POSITION]', 'position', clean(data.position) ?? '');
   if (data.staffId !== undefined) field('Staffid', 'staffId', clean(data.staffId));
   if (data.staffTel !== undefined) field('stafftel', 'staffTel', clean(data.staffTel));
   if (data.brandId !== undefined) field('BrandID', 'brandId', clean(data.brandId) ?? '');

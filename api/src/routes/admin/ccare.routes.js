@@ -28,6 +28,7 @@ import {
  */
 const router = Router();
 
+router.get('/brands', ccareController.brands);
 router.get('/users', validate({ query: listQuery }), asyncHandler(ccareController.list));
 router.get('/users/:id', asyncHandler(ccareController.get));
 // Vas Service operations: any signed-in CCare member (and admins) may run them.
