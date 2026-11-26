@@ -27,9 +27,9 @@ const INSERT_CHUNK = 150;
  * heartbeat. Returns how many new entries were stored.
  */
 export async function ingest({ host, agentVersion, startedAt, auditd, caches, events }, ip) {
-  // Only overwrite what this batch actually reports.
-  await ServerAgent.upsert({
-    host,
+  // Only overwrite what this batch actually reports. (No upsert: Sequelize's
+  // MERGE statement fails on SQL Server, so plain UPDATE / INSERT instead.)
+  const values = {
     lastSeenAt: new Date(),
     lastIp: ip ?? null,
     ...(agentVersion ? { agentVersion } : {}),
@@ -37,7 +37,8 @@ export async function ingest({ host, agentVersion, startedAt, auditd, caches, ev
     ...(startedAt ? { startedAt: new Date(startedAt) } : {}),
     // Cache sizes only arrive every few minutes; keep the last ones in between.
     ...(caches ? { caches, cachesAt: new Date() } : {}),
-  });
+  };
+  await saveAgent(host, values);
   if (!events.length) return 0;
 
   // Drop duplicates inside the batch, then those already in the table.
@@ -64,6 +65,24 @@ export async function ingest({ host, agentVersion, startedAt, auditd, caches, ev
   }));
   for (let i = 0; i < rows.length; i += INSERT_CHUNK) await ServerLog.bulkCreate(rows.slice(i, i + INSERT_CHUNK));
   return rows.length;
+}
+
+/**
+ * Update the agent row, or create it on its first report. Done through the row
+ * (not a static update) so the JSON column is written as text on SQL Server.
+ */
+async function saveAgent(host, values) {
+  const row = await ServerAgent.findByPk(host);
+  if (row) {
+    await row.update(values);
+    return;
+  }
+  try {
+    await ServerAgent.create({ host, ...values });
+  } catch (err) {
+    if (err.name !== 'SequelizeUniqueConstraintError') throw err;
+    await (await ServerAgent.findByPk(host))?.update(values); // another batch created it first
+  }
 }
 
 /** A page of server entries, newest first. */

@@ -1,5 +1,5 @@
 /*
-  SQL Server Audit — run on the SQL Server machine (the database is NOT on the
+  SQL Server Audit — run on the SQL Server machine (172.28.26.21) (the database is NOT on the
   API server, so the Linux agent cannot see what happens inside SQL Server).
 
   Records every DELETE, TRUNCATE, DROP and ALTER in the database, and every sign-in (success + failure), with who did it, from which
@@ -31,12 +31,12 @@ CREATE SERVER AUDIT SPECIFICATION MyTrackHub_ServerSpec
   WITH (STATE = ON);
 GO
 
-USE [mytplus_tracking];   -- ← your database name
+USE [TPLUSTRACKINGHUB];   -- ← your database name
 GO
 -- Data changes and schema changes inside the database, by anyone
 CREATE DATABASE AUDIT SPECIFICATION MyTrackHub_DbSpec
   FOR SERVER AUDIT MyTrackHub_Audit
-  ADD (DELETE ON DATABASE::[mytplus_tracking] BY [public]),
+  ADD (DELETE ON DATABASE::[TPLUSTRACKINGHUB] BY [public]),
   ADD (SCHEMA_OBJECT_CHANGE_GROUP),
   ADD (DATABASE_PRINCIPAL_CHANGE_GROUP),
   ADD (DATABASE_ROLE_MEMBER_CHANGE_GROUP)
@@ -46,5 +46,5 @@ GO
   Only DELETE is recorded on purpose: the API inserts a row for every app event,
   so auditing INSERT/UPDATE would add millions of rows. To also record UPDATE by
   people (not the API), add for example:
-    ADD (UPDATE ON DATABASE::[mytplus_tracking] BY [some_person_login])
+    ADD (UPDATE ON DATABASE::[TPLUSTRACKINGHUB] BY [some_person_login])
 */
