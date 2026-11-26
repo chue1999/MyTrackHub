@@ -45,6 +45,14 @@ function textable(phone) {
 /** Throws a clear error when a new password could not be texted to this phone. */
 export function assertCanText(phone) {
   if (!phone) throw HttpError.badRequest('Enter the phone number: the password is sent to it by SMS.');
+  // In production the password is only ever delivered by SMS: without a gateway
+  // nobody would receive it, so refuse instead of creating an unusable account.
+  if (!config.sms.enabled && config.isProduction) {
+    throw new HttpError(
+      503,
+      'SMS is not set up on this server (SMS_URL and SMS_APIKEY in api/.env.production), so the password cannot be sent.',
+    );
+  }
   if (!textable(phone)) {
     throw HttpError.forbidden('SMS to this number is not enabled yet (test mode). Use one of the test numbers.');
   }

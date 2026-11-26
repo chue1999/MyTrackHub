@@ -178,6 +178,8 @@ const devPassword = ref<{ name: string; password: string } | null>(null)
 function afterPassword(r: PasswordResult, done: string) {
   if (r.passwordSent === false) {
     toast(`${done}, but the SMS failed: ${r.passwordError ?? ''} Use "Send new password".`, 'warning')
+  } else if (r.devPassword) {
+    toast(`${done} — SMS is off on this computer (no SMS_APIKEY), so the password is shown instead`, 'warning')
   } else {
     toast(`${done} — password sent by SMS to ${r.phoneHint ?? 'the phone'}`)
   }
