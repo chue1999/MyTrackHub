@@ -24,7 +24,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const run = promisify(execFile);
 
 // ── settings ──
@@ -47,6 +47,8 @@ const CACHE_REPORT_MS = Number(process.env.CACHE_REPORT_MS || 300_000);
 const JOURNAL_KEEP = process.env.JOURNAL_KEEP || '7d';
 const TMP_DAYS = Number(process.env.TMP_DAYS || 7);
 const PM2_LOG_DIR = process.env.PM2_LOG_DIR || '';
+// Only these PM2 log files are ever emptied (other apps' logs are left alone).
+const PM2_LOG_PREFIX = process.env.PM2_LOG_PREFIX || 'mytrackhub-';
 const NGINX_CACHE_DIR = process.env.NGINX_CACHE_DIR || '';
 const BATCH = 400;
 const startedAt = new Date().toISOString();
@@ -401,19 +403,41 @@ async function journalBytes() {
   if (!m) return null;
   return Math.round(Number(m[1]) * 1024 ** 'BKMGT'.indexOf(m[2]));
 }
-async function oldTmpBytes() {
-  let total = 0;
-  for (const dir of ['/tmp', '/var/tmp']) {
-    const out = await sh('find', [dir, '-xdev', '-type', 'f', '-atime', `+${TMP_DAYS}`, '-printf', '%s\\n'], 120_000).catch(() => '');
-    for (const n of out.split('\n')) total += Number(n) || 0;
+// Old temporary files: only /tmp (never /var/tmp, which programs use to keep
+// files across reboots), only regular files neither read NOR changed for
+// TMP_DAYS days, never inside system folders, never a file any program has open.
+const TMP_SKIP = ['/tmp/systemd-private-', '/tmp/snap-private-tmp', '/tmp/.X11-unix', '/tmp/.ICE-unix', '/tmp/.font-unix', '/tmp/.XIM-unix', '/tmp/.Test-unix'];
+async function openFiles() {
+  const open = new Set();
+  for (const pid of await fsp.readdir('/proc').catch(() => [])) {
+    if (!/^\d+$/.test(pid)) continue;
+    for (const fd of await fsp.readdir(`/proc/${pid}/fd`).catch(() => [])) {
+      const target = await fsp.readlink(`/proc/${pid}/fd/${fd}`).catch(() => null);
+      if (target?.startsWith('/tmp/')) open.add(target);
+    }
   }
-  return total;
+  return open;
+}
+async function oldTmpFiles() {
+  const out = await sh('find', ['/tmp', '-xdev', '-type', 'f', '-atime', `+${TMP_DAYS}`, '-mtime', `+${TMP_DAYS}`, '-printf', '%s\t%p\n'], 120_000).catch(() => '');
+  const open = await openFiles();
+  return out
+    .split('\n')
+    .filter(Boolean)
+    .map((l) => {
+      const i = l.indexOf('\t');
+      return { size: Number(l.slice(0, i)) || 0, path: l.slice(i + 1) };
+    })
+    .filter((f) => !TMP_SKIP.some((p) => f.path.startsWith(p)) && !open.has(f.path));
+}
+async function oldTmpBytes() {
+  return (await oldTmpFiles()).reduce((s, f) => s + f.size, 0);
 }
 async function pm2LogBytes() {
   if (!PM2_LOG_DIR) return null;
   let total = 0;
   for (const f of await fsp.readdir(PM2_LOG_DIR).catch(() => [])) {
-    if (f.endsWith('.log')) total += (await fsp.stat(path.join(PM2_LOG_DIR, f)).catch(() => ({ size: 0 }))).size;
+    if (f.startsWith(PM2_LOG_PREFIX) && f.endsWith('.log')) total += (await fsp.stat(path.join(PM2_LOG_DIR, f)).catch(() => ({ size: 0 }))).size;
   }
   return total;
 }
@@ -452,27 +476,33 @@ const ACTIONS = {
     return { freed: Math.max(0, (before ?? 0) - (after ?? 0)), output: out || 'apt-get clean done' };
   },
   async tmp() {
-    const before = await oldTmpBytes();
-    const lines = [];
-    for (const dir of ['/tmp', '/var/tmp']) {
-      lines.push(await sh('find', [dir, '-xdev', '-type', 'f', '-atime', `+${TMP_DAYS}`, '-print', '-delete'], 300_000).catch((e) => e.message));
+    const files = await oldTmpFiles();
+    let freed = 0;
+    const done = [];
+    for (const f of files) {
+      try {
+        await fsp.unlink(f.path);
+        freed += f.size;
+        done.push(f.path);
+      } catch {
+        /* gone or in use: skip */
+      }
     }
-    const list = lines.join('\n').trim();
-    return { freed: before, output: list ? `Deleted:\n${list}`.slice(0, 15000) : 'Nothing older than the limit.' };
+    return { freed, output: done.length ? `Deleted ${done.length} file(s):\n${done.join('\n')}`.slice(0, 15000) : 'Nothing old enough to delete.' };
   },
   async pm2_logs() {
     if (!PM2_LOG_DIR) throw new Error('PM2_LOG_DIR is not set in /etc/mytrackhub-agent.env');
     let freed = 0;
     const done = [];
     for (const f of await fsp.readdir(PM2_LOG_DIR)) {
-      if (!f.endsWith('.log')) continue;
+      if (!f.startsWith(PM2_LOG_PREFIX) || !f.endsWith('.log')) continue;
       const p = path.join(PM2_LOG_DIR, f);
       const { size } = await fsp.stat(p);
       await fsp.truncate(p, 0);
       freed += size;
       done.push(`${f} (${size} B)`);
     }
-    return { freed, output: done.length ? `Emptied: ${done.join(', ')}` : 'No log files found.' };
+    return { freed, output: done.length ? `Emptied: ${done.join(', ')}` : `No ${PM2_LOG_PREFIX}*.log files found.` };
   },
   async nginx_cache() {
     if (!NGINX_CACHE_DIR) throw new Error('NGINX_CACHE_DIR is not set in /etc/mytrackhub-agent.env');

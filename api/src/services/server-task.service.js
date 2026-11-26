@@ -14,28 +14,30 @@ export const ACTIONS = {
   page_cache: {
     title: 'Memory page cache',
     description:
-      'Frees RAM that Linux uses to cache files (sync + drop_caches). Safe: the cache refills by itself as files are read again.',
+      'Frees RAM that Linux uses to cache files. Everything is written to disk first (sync), so no data is touched; the server is only a little slower for a few minutes while the cache refills.',
     risk: 'low',
   },
   journal: {
     title: 'System journal (old logs)',
     description:
-      'Removes journald logs older than the agent’s keep period (default 7 days). Server log entries already sent here are kept.',
+      'Removes system logs (journald) older than the keep period (7 days). No app data or database is touched; Server logs already sent here are kept.',
     risk: 'medium',
   },
   apt: {
     title: 'APT package cache',
-    description: 'Deletes downloaded .deb package files (apt-get clean). Installed software is not touched.',
+    description: 'Deletes only downloaded .deb installer files (apt-get clean). Installed software and data are not touched.',
     risk: 'low',
   },
   tmp: {
     title: 'Old temporary files',
-    description: 'Deletes files in /tmp and /var/tmp not used for more than 7 days.',
+    description:
+      'Deletes only files in /tmp neither opened nor changed for 7 days. Never /var/tmp, never system folders, never a file any program has open.',
     risk: 'medium',
   },
   pm2_logs: {
     title: 'PM2 / API log files',
-    description: 'Empties the PM2 log files of the API (the files stay, their content is cleared).',
+    description:
+      'Empties only the MyTrackHub PM2 log files (mytrackhub-*.log). Other apps (ezapi, topup-api…) are not touched; the files stay, only their text is cleared.',
     risk: 'medium',
   },
   nginx_cache: {
@@ -82,6 +84,8 @@ export async function recentTasks() {
 export async function request({ host, action }, me, ip) {
   const agent = await ServerAgent.findByPk(host);
   if (!agent) throw HttpError.notFound('No agent is installed on this server.');
+  const size = agent.caches?.[action];
+  if (size === null || size === undefined) throw HttpError.badRequest('This cache is not set up on that server.');
   const open = await ServerTask.count({ where: { host, action, status: { [Op.in]: ['pending', 'running'] } } });
   if (open) throw HttpError.badRequest('This is already waiting or running on that server.');
 

@@ -215,6 +215,9 @@ const took = (t: Task) =>
                   >
                   <span v-if="lastDone(a.key)!.status === 'failed'" class="text-error"> · failed</span>
                 </template>
+                <template v-else-if="agent.caches[a.key] === null || agent.caches[a.key] === undefined"
+                  >Not set up on this server</template
+                >
                 <template v-else>Never cleared from here</template>
               </div>
               <v-btn
@@ -222,7 +225,7 @@ const took = (t: Task) =>
                 class="text-none text-black font-weight-bold"
                 prepend-icon="mdi-broom"
                 :loading="!!openTask(a.key)"
-                :disabled="!!openTask(a.key)"
+                :disabled="!!openTask(a.key) || agent.caches[a.key] === null || agent.caches[a.key] === undefined"
                 @click="confirm = a"
                 >Clear</v-btn
               >
