@@ -75,7 +75,9 @@ export async function deliverPassword({ user, password, reason, actor, ip }) {
       ok: false,
       error: err.message,
     }));
-    gateway = r.ok ? 'sent' : `error:${r.status ?? r.error ?? ''}`;
+    // e.g. "error:401 Unauthorized…" or "error:connect ETIMEDOUT…" — shown to the admin and logged.
+    const reply = typeof r.response === 'string' ? r.response : JSON.stringify(r.response ?? '');
+    gateway = r.ok ? 'sent' : `error:${r.status ?? ''} ${r.error ?? reply}`.trim().slice(0, 200);
     if (!r.ok) {
       await logCcare({
         ccareUserId: user.id,
@@ -86,7 +88,10 @@ export async function deliverPassword({ user, password, reason, actor, ip }) {
         ip,
         detail: { reason, phoneHint: maskPhone(user.staffTel), gateway },
       });
-      throw new HttpError(502, 'The SMS with the password could not be sent. Use "Send new password" to try again.');
+      throw new HttpError(
+        502,
+        `The SMS with the password could not be sent (gateway: ${gateway}). Use "Send new password" to try again.`,
+      );
     }
   }
   await logCcare({
