@@ -172,10 +172,18 @@ interface PasswordResult {
   passwordError?: string
   phoneHint?: string
   devPassword?: string
+  // SMS failed and SMS_PASSWORD_FALLBACK is on: hand this over in person.
+  fallbackPassword?: string
+  gatewayError?: string
 }
 // Development only (no SMS gateway): the API returns the password so it can be tested.
-const devPassword = ref<{ name: string; password: string } | null>(null)
+const devPassword = ref<{ name: string; password: string; fallback?: boolean; reason?: string } | null>(null)
 function afterPassword(r: PasswordResult, done: string) {
+  if (r.fallbackPassword) {
+    toast(`${done} — the SMS could not be sent, give the password to the staff member yourself`, 'warning')
+    devPassword.value = { name: r.name, password: r.fallbackPassword, fallback: true, reason: r.gatewayError }
+    return
+  }
   if (r.passwordSent === false) {
     toast(`${done}, but the SMS failed: ${r.passwordError ?? ''} Use "Send new password".`, 'warning')
   } else if (r.devPassword) {
@@ -505,10 +513,22 @@ function toast(text: string, color = 'success') {
     <!-- development only: the generated password (no SMS gateway) -->
     <v-dialog :model-value="!!devPassword" max-width="420" @update:model-value="devPassword = null">
       <v-card v-if="devPassword" rounded="xl" class="pa-5">
-        <div class="text-overline text-warning">Development · SMS is off</div>
-        <div class="text-body-2 mb-3">
-          In production this is sent by SMS and never shown. Password for <strong>{{ devPassword.name }}</strong>:
-        </div>
+        <template v-if="devPassword.fallback">
+          <div class="text-overline text-warning">SMS could not be sent</div>
+          <div class="text-body-2 mb-2">
+            Give this password to <strong>{{ devPassword.name }}</strong> yourself (in person or by phone). It is shown
+            only now; this is recorded in the CCare log.
+          </div>
+          <div v-if="devPassword.reason" class="text-caption text-medium-emphasis mb-3">
+            Gateway: {{ devPassword.reason }}
+          </div>
+        </template>
+        <template v-else>
+          <div class="text-overline text-warning">Development · SMS is off</div>
+          <div class="text-body-2 mb-3">
+            In production this is sent by SMS and never shown. Password for <strong>{{ devPassword.name }}</strong>:
+          </div>
+        </template>
         <div class="dev-pw">{{ devPassword.password }}</div>
         <div class="d-flex justify-end mt-4">
           <v-btn variant="text" class="text-none" @click="devPassword = null">Close</v-btn>

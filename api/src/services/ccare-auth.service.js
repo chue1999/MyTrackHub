@@ -86,8 +86,13 @@ export async function deliverPassword({ user, password, reason, actor, ip }) {
         success: false,
         actor,
         ip,
-        detail: { reason, phoneHint: maskPhone(user.staffTel), gateway },
+        detail: { reason, phoneHint: maskPhone(user.staffTel), gateway, shownToAdmin: config.smsPasswordFallback },
       });
+      // Temporary fallback (SMS_PASSWORD_FALLBACK=true): while the gateway refuses
+      // us, show the password once to the admin, who hands it over in person.
+      if (config.smsPasswordFallback) {
+        return { phoneHint: maskPhone(user.staffTel), sent: false, gatewayError: gateway, fallbackPassword: password };
+      }
       throw new HttpError(
         502,
         `The SMS with the password could not be sent (gateway: ${gateway}). Use "Send new password" to try again.`,

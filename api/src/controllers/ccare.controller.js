@@ -69,7 +69,7 @@ export async function create(req, res) {
     // The account exists; the admin can resend with "Send new password".
     return res.status(201).json({ ...user, passwordSent: false, passwordError: err.message });
   }
-  res.status(201).json({ ...user, passwordSent: true, ...delivery });
+  res.status(201).json({ ...user, passwordSent: delivery.sent !== false || !!delivery.devPassword, ...delivery });
 }
 
 /** PATCH /ccare/users/:id */
@@ -94,7 +94,7 @@ export async function resetPassword(req, res) {
   const user = await ccare.resetPassword(id, password);
   await audit(req, 'password_reset_by_admin', user);
   const delivery = await deliverPassword({ user, password, reason: 'reset', actor: req.me.username, ip: ipOf(req) });
-  res.json({ ...user, passwordSent: true, ...delivery });
+  res.json({ ...user, passwordSent: delivery.sent !== false || !!delivery.devPassword, ...delivery });
 }
 
 /** POST /ccare/users/:id/active */

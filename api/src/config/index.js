@@ -78,6 +78,12 @@ const schema = z.object({
   SMS_COUNTRY_CODE: z.string().default(''),
   // Optional separate settings for NewPassword SMS (account created / new password).
   // Each one falls back to the SMS_ value above when empty.
+  // Temporary: when the NewPassword SMS fails, show the password once to the
+  // admin instead (logged). For use until the gateway accepts this server.
+  SMS_PASSWORD_FALLBACK: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
   SMS_PASSWORD_URL: z.string().default(''),
   SMS_PASSWORD_APIKEY: z.string().default(''),
   SMS_PASSWORD_USER: z.string().default(''),
@@ -170,6 +176,8 @@ export const config = Object.freeze({
     from: env.SMS_FROM,
     countryCode: env.SMS_COUNTRY_CODE,
   }),
+  smsPasswordFallback: env.SMS_PASSWORD_FALLBACK,
+
   // NewPassword SMS: own gateway settings when given, otherwise the same as above.
   smsPassword: Object.freeze({
     enabled: !!(env.SMS_PASSWORD_URL || env.SMS_URL),
