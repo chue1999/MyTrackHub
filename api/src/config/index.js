@@ -156,7 +156,8 @@ export const config = Object.freeze({
   // CCare SMS one-time codes. `enabled` false → the code is returned to the
   // caller (development), so the flow works without a live SMS gateway.
   sms: Object.freeze({
-    enabled: !!env.SMS_URL && !!env.SMS_APIKEY,
+    // The gateway URL alone switches SMS on; the API key is optional (sent when set).
+    enabled: !!env.SMS_URL,
     url: env.SMS_URL,
     apiKey: env.SMS_APIKEY,
     user: env.SMS_USER,

@@ -26,7 +26,7 @@ export function sendSms(to, content) {
   if (!config.sms.enabled) {
     logger.warn(
       { hasUrl: !!config.sms.url, hasApiKey: !!config.sms.apiKey },
-      'SMS not sent: gateway disabled (set SMS_URL and SMS_APIKEY to enable)',
+      'SMS not sent: gateway disabled (set SMS_URL to enable)',
     );
     return Promise.resolve({ ok: false, skipped: true, response: 'SMS gateway not configured' });
   }
@@ -49,7 +49,8 @@ export function sendSms(to, content) {
         rejectUnauthorized: false, // internal gateway, self-signed cert (matches the PHP client)
         headers: {
           'Content-Type': 'application/json',
-          apikey: config.sms.apiKey,
+          // Only when a key is configured (the internal gateway may not need one).
+          ...(config.sms.apiKey ? { apikey: config.sms.apiKey } : {}),
           'Content-Length': Buffer.byteLength(body),
         },
         timeout: 15000,
