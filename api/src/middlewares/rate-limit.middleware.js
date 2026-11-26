@@ -11,3 +11,6 @@ export const loginLimiter = rateLimit({ ...common, windowMs: 15 * 60_000, limit:
 
 /** App event ingestion: 600 batches per minute per IP. */
 export const trackLimiter = rateLimit({ ...common, windowMs: 60_000, limit: 600 });
+
+/** Server agent batches: 120 per minute per IP (it polls every few seconds). */
+export const agentLimiter = rateLimit({ ...common, windowMs: 60_000, limit: 120 });

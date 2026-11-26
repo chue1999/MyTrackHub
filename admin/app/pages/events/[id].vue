@@ -17,7 +17,7 @@ const {
 /** Back to wherever the user came from (activity log, user page, dashboard). */
 function goBack() {
   if (window.history.state?.back) router.back()
-  else navigateTo('/events')
+  else navigateTo('/logs?tab=mytplus')
 }
 
 const p = computed(() => (e.value?.properties ?? {}) as JsonRecord)
@@ -123,7 +123,7 @@ useHead(() => ({ title: e.value ? eventTitle(e.value) : 'Action' }))
         Back
       </v-btn>
       <div class="crumbs">
-        <NuxtLink to="/events" class="crumb">Activity log</NuxtLink>
+        <NuxtLink to="/logs?tab=mytplus" class="crumb">Logs</NuxtLink>
         <v-icon icon="mdi-chevron-right" size="16" />
         <span>Action #{{ id }}</span>
       </div>

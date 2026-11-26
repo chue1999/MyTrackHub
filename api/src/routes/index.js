@@ -4,6 +4,7 @@ import { config } from '../config/index.js';
 import { health } from '../controllers/health.controller.js';
 import adminRoutes from './admin/index.js';
 import publicRoutes from './public.routes.js';
+import serverAgentRoutes from './server-agent.routes.js';
 import trackRoutes from './track.routes.js';
 
 /**
@@ -11,6 +12,7 @@ import trackRoutes from './track.routes.js';
  *
  *   GET  /health                     health check
  *   POST /api/v1/track               mobile app → events (x-api-key)
+ *   POST /api/v1/server-agent/events server agent → server activity (x-agent-key)
  *   *    /api/v1/admin/...           admin website (JWT)
  *   GET  /api/v1/public/branding     website name & logo (no login)
  *
@@ -24,6 +26,7 @@ const websiteCors = cors({ origin: config.corsOrigins, allowedHeaders: ['Content
 
 router.get('/health', health);
 router.use('/api/v1/track', trackRoutes);
+router.use('/api/v1/server-agent', serverAgentRoutes);
 router.use(['/api/v1/admin', '/api/admin'], websiteCors, adminRoutes);
 router.use(['/api/v1/public', '/api/public'], websiteCors, publicRoutes);
 

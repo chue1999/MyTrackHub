@@ -24,6 +24,10 @@ export function normalizePhone(raw) {
  */
 export function sendSms(to, content) {
   if (!config.sms.enabled) {
+    logger.warn(
+      { hasUrl: !!config.sms.url, hasApiKey: !!config.sms.apiKey },
+      'SMS not sent: gateway disabled (set SMS_URL and SMS_APIKEY to enable)',
+    );
     return Promise.resolve({ ok: false, skipped: true, response: 'SMS gateway not configured' });
   }
   const url = new URL(config.sms.url);
@@ -60,7 +64,11 @@ export function sendSms(to, content) {
           } catch {
             // keep the raw text
           }
-          resolve({ ok: res.statusCode >= 200 && res.statusCode < 300, status: res.statusCode, response: parsed });
+          const ok = res.statusCode >= 200 && res.statusCode < 300;
+          // Log the gateway outcome so OTP delivery can be debugged (the code
+          // itself is never logged — only the recipient and the gateway reply).
+          logger.info({ to, status: res.statusCode, ok, response: parsed }, 'SMS gateway response');
+          resolve({ ok, status: res.statusCode, response: parsed });
         });
       },
     );

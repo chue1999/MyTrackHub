@@ -49,5 +49,7 @@ export async function deleteAccount(id, currentAdminId) {
   if (account.role === 'admin' && account.isActive && (await otherActiveAdmins(account.id)) === 0) {
     throw HttpError.badRequest(LAST_ADMIN_MESSAGE);
   }
+  const removed = { id: account.id, username: account.username, displayName: account.displayName, role: account.role };
   await account.destroy();
+  return removed;
 }

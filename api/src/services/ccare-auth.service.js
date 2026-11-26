@@ -117,7 +117,10 @@ async function issueCode({ user, purpose, action, ip }) {
   return out;
 }
 
-const MODE = config.ccareAuth.mode; // 'proxy' | 'local' | 'hybrid'
+// In development (PostgreSQL / local dev accounts) sign-in is fully local: the
+// My CCare proxy (10.30.6.94) is skipped so accounts created in dev log in with
+// their own md5 password and a local OTP code.
+const MODE = ccare.ccareDev ? 'local' : config.ccareAuth.mode; // 'proxy' | 'local' | 'hybrid'
 const USES_PROXY = MODE === 'proxy' || MODE === 'hybrid';
 const USES_LOCAL = MODE === 'local' || MODE === 'hybrid';
 

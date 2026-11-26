@@ -67,5 +67,13 @@ export const logsQuery = z.object({
   action: z.string().trim().max(40).optional(),
   userId: z.coerce.number().int().positive().optional(),
   page: z.coerce.number().int().min(1).optional().default(1),
-  pageSize: z.coerce.number().int().min(1).max(200).optional().default(50),
+  // Up to 5000 so the Excel export can page through the whole log quickly.
+  pageSize: z.coerce.number().int().min(1).max(5000).optional().default(50),
+});
+
+/** DELETE /ccare/logs — optional filters to clear a subset (or all). */
+export const logsClearQuery = z.object({
+  action: z.string().trim().max(40).optional(),
+  userId: z.coerce.number().int().positive().optional(),
+  before: z.string().trim().max(40).optional(),
 });

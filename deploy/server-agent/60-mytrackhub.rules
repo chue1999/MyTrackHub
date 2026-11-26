@@ -1,0 +1,41 @@
+## MyTrackHub server audit rules  →  /etc/audit/rules.d/60-mytrackhub.rules
+## Load with:  sudo augenrules --load
+## Only actions by a real signed-in person are recorded (auid >= 1000 and set);
+## system daemons (logrotate, apt timers…) are ignored.
+
+## 1) Deleting / renaming files in the app, nginx and ssh folders
+-a always,exit -F arch=b64 -S unlink,unlinkat,rename,renameat,rmdir -F dir=/var/www -F auid>=1000 -F auid!=4294967295 -k mth_delete
+-a always,exit -F arch=b32 -S unlink,unlinkat,rename,renameat,rmdir -F dir=/var/www -F auid>=1000 -F auid!=4294967295 -k mth_delete
+-a always,exit -F arch=b64 -S unlink,unlinkat,rename,renameat,rmdir -F dir=/etc/nginx -F auid>=1000 -F auid!=4294967295 -k mth_delete
+-a always,exit -F arch=b32 -S unlink,unlinkat,rename,renameat,rmdir -F dir=/etc/nginx -F auid>=1000 -F auid!=4294967295 -k mth_delete
+-a always,exit -F arch=b64 -S unlink,unlinkat,rename,renameat,rmdir -F dir=/etc/ssh -F auid>=1000 -F auid!=4294967295 -k mth_delete
+-a always,exit -F arch=b32 -S unlink,unlinkat,rename,renameat,rmdir -F dir=/etc/ssh -F auid>=1000 -F auid!=4294967295 -k mth_delete
+
+## 2) Changes to important config files
+-w /var/www/MyTrackHub/api/.env.production -p wa -k mth_change
+-w /var/www/MyTrackHub/ecosystem.config.cjs -p wa -k mth_change
+-w /etc/nginx/ -p wa -k mth_change
+-w /etc/ssh/sshd_config -p wa -k mth_change
+-w /etc/crontab -p wa -k mth_change
+-w /etc/cron.d/ -p wa -k mth_change
+
+## 3) Users, groups, passwords, sudo rights
+-w /etc/passwd -p wa -k mth_identity
+-w /etc/shadow -p wa -k mth_identity
+-w /etc/group -p wa -k mth_identity
+-w /etc/gshadow -p wa -k mth_identity
+-w /etc/sudoers -p wa -k mth_identity
+-w /etc/sudoers.d/ -p wa -k mth_identity
+
+## 4) Attempts to change or switch off auditing / the agent
+-w /etc/audit/ -p wa -k mth_audit
+-w /sbin/auditctl -p x -k mth_audit
+-w /etc/mytrackhub-agent.env -p wa -k mth_audit
+-w /opt/mytrackhub-agent/ -p wa -k mth_audit
+-a always,exit -F arch=b64 -S unlink,unlinkat,rename,renameat,truncate,ftruncate -F dir=/var/log/audit -F auid>=1000 -F auid!=4294967295 -k mth_audit
+-a always,exit -F arch=b32 -S unlink,unlinkat,rename,renameat,truncate,ftruncate -F dir=/var/log/audit -F auid>=1000 -F auid!=4294967295 -k mth_audit
+
+## Optional, strongest protection: lock the rules until the next reboot
+## (nobody, not even root, can remove them without rebooting — and a reboot is
+## visible). Uncomment only when everything works:
+# -e 2

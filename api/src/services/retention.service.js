@@ -1,6 +1,7 @@
 import { Op, QueryTypes } from 'sequelize';
 import { isMssql, sequelize } from '../db/index.js';
 import { Event, Setting } from '../models/index.js';
+import { logCcare } from './ccare-log.service.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -74,7 +75,17 @@ export function runCleanup({ force = false, by = 'auto' } = {}) {
       by,
       ms: Date.now() - startedAt,
     };
-    if (deleted) logger.info({ deleted, months: settings.months, cutoff }, 'Retention: deleted old events');
+    if (deleted) {
+      logger.info({ deleted, months: settings.months, cutoff }, 'Retention: deleted old events');
+      // Recorded in the audit log: who (or 'auto') deleted how many app events.
+      await logCcare({
+        name: by,
+        action: 'events_purged',
+        success: true,
+        actor: by,
+        detail: { deletedBy: by, deleted, olderThan: cutoff.toISOString(), months: settings.months },
+      });
+    }
     return { skipped: false, settings: await saveRetention({ lastRun }) };
   })().finally(() => {
     runningCleanup = null;

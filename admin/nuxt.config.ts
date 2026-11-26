@@ -42,7 +42,8 @@ export default defineNuxtConfig({
   // `npm run dev`: /api/… → the API on port 4000 (same as nginx in production).
   nitro: {
     devProxy: {
-      '/api': { target: 'http://localhost:4000/api', changeOrigin: true },
+      // NUXT_DEV_API=http://172.28.14.181/api → use the server's API (and its data) instead.
+      '/api': { target: process.env.NUXT_DEV_API || 'http://localhost:4000/api', changeOrigin: true },
     },
   },
 

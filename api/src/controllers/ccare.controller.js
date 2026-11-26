@@ -1,4 +1,14 @@
-import { getLog, ipOf, listActions, listLogs, logCcare, summary, userSummary } from '../services/ccare-log.service.js';
+import {
+  clearLogs,
+  deleteLog,
+  getLog,
+  ipOf,
+  listActions,
+  listLogs,
+  logCcare,
+  summary,
+  userSummary,
+} from '../services/ccare-log.service.js';
 import { HttpError } from '../utils/http-error.js';
 import * as ccare from '../services/ccare.service.js';
 
@@ -82,24 +92,76 @@ export async function vasSubmit(req, res) {
   });
 }
 
+// CCare accounts never see MyTPlus system entries (admin accounts, SQL, clean-up).
+const hideSystem = (req) => req.me?.kind === 'ccare';
+
 /** GET /ccare/logs — the CCare activity log (newest first). */
 export async function logs(req, res) {
-  res.json(await listLogs(req.validatedQuery));
+  res.json(await listLogs({ ...req.validatedQuery, hideSystem: hideSystem(req) }));
 }
 
 /** GET /ccare/logs/:id — one audit entry in full, for the activity detail page. */
 export async function logDetail(req, res) {
-  const row = await getLog(req.params.id);
+  const row = await getLog(req.params.id, { hideSystem: hideSystem(req) });
   if (!row) throw HttpError.notFound('This activity entry was not found.');
   res.json(row);
 }
 
+/**
+ * DELETE /ccare/logs/:id — remove one activity entry (manager only). A full copy
+ * of the removed entry and who removed it is kept as a 'log_deleted' entry.
+ */
+export async function logDelete(req, res) {
+  const row = await deleteLog(req.params.id, { hideSystem: hideSystem(req) });
+  if (!row) throw HttpError.notFound('This activity entry was not found.');
+  if (row === 'protected') throw HttpError.forbidden('Delete records cannot be deleted.');
+  await logCcare({
+    ccareUserId: row.ccareUserId,
+    name: row.name,
+    action: 'log_deleted',
+    success: true,
+    actor: req.me.username,
+    ip: ipOf(req),
+    detail: {
+      deletedBy: req.me.username,
+      deletedId: Number(row.id),
+      deletedAction: row.action,
+      deletedAt: row.at,
+      deletedActor: row.actor,
+      deletedSuccess: row.success,
+      deletedDetail: row.detail,
+    },
+  });
+  res.json({ ok: true });
+}
+
+/** DELETE /ccare/logs — bulk clear by filter, or everything (manager only). */
+export async function logsClear(req, res) {
+  const { action, userId, before } = req.validatedQuery ?? {};
+  const removed = await clearLogs({ action, userId, before });
+  await logCcare({
+    name: req.me.username,
+    action: 'logs_cleared',
+    success: true,
+    actor: req.me.username,
+    ip: ipOf(req),
+    detail: {
+      deletedBy: req.me.username,
+      removed,
+      action: action ?? null,
+      userId: userId ?? null,
+      before: before ?? null,
+    },
+  });
+  res.json({ ok: true, removed });
+}
+
 /** GET /ccare/log-actions — distinct action names for the filter. */
-export async function logActions(_req, res) {
-  res.json(await listActions());
+export async function logActions(req, res) {
+  res.json(await listActions({ hideSystem: hideSystem(req) }));
 }
 
 /** GET /ccare/logs/summary — headline counts for the activity page. */
-export async function logSummary(_req, res) {
-  res.json(await summary());
+export async function logSummary(req, res) {
+  res.json(await summary({ hideSystem: hideSystem(req) }));
 }

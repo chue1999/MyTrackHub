@@ -20,6 +20,14 @@ export function requireAppKey(req, _res, next) {
   next();
 }
 
+/** The server agent (deploy/server-agent) sends its shared key in `x-agent-key`. */
+export function requireAgentKey(req, _res, next) {
+  if (!config.serverAgent.key) throw new HttpError(503, 'The server agent endpoint is not configured');
+  const key = req.get('x-agent-key');
+  if (!key || !safeEqual(key, config.serverAgent.key)) throw new HttpError(401, 'Invalid agent key');
+  next();
+}
+
 /**
  * Admin website requests carry `Authorization: Bearer <jwt>`.
  * The account is re-read on every request, so a disabled or deleted account

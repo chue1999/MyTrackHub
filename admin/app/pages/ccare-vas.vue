@@ -155,6 +155,54 @@ async function run(group: Group) {
   }
 }
 
+// The four console cards share one layout; only their fields and colour differ.
+const CARDS = [
+  {
+    group: 'action' as Group,
+    form: 'action' as const,
+    title: 'Subscriber & SIM',
+    sub: 'Look up and manage a SIM by MSISDN / IMSI',
+    icon: 'mdi-sim-outline',
+    accent: '#d99a00',
+    imsi: true,
+    selectLabel: 'Action',
+    options: ACTION_OPTIONS,
+  },
+  {
+    group: 'code' as Group,
+    form: 'code' as const,
+    title: 'Service codes',
+    sub: 'IR, 5G/4G/3G, deposits, KYC, SPNV…',
+    icon: 'mdi-cog-transfer-outline',
+    accent: '#2f80ed',
+    imsi: false,
+    selectLabel: 'Code',
+    options: CODE_OPTIONS,
+  },
+  {
+    group: 'package' as Group,
+    form: 'pkg' as const,
+    title: 'Package',
+    sub: 'Assign a data package',
+    icon: 'mdi-package-variant-closed',
+    accent: '#12a594',
+    imsi: false,
+    selectLabel: 'Package',
+    options: PACKAGE_OPTIONS,
+  },
+  {
+    group: 'kyc' as Group,
+    form: 'kyc' as const,
+    title: 'KYC',
+    sub: "Show a subscriber's KYC",
+    icon: 'mdi-card-account-details-outline',
+    accent: '#7c4dc4',
+    imsi: false,
+    selectLabel: 'Action',
+    options: KYC_OPTIONS,
+  },
+]
+
 function toast(text: string, color = 'success') {
   Object.assign(snack, { show: true, text, color })
 }
@@ -162,177 +210,96 @@ function toast(text: string, color = 'success') {
 
 <template>
   <div>
-    <div class="d-flex flex-wrap align-center ga-3 mb-6">
-      <div>
+    <div class="vas-hero mb-5">
+      <div class="vas-hero-ico"><v-icon icon="mdi-cellphone-cog" size="26" /></div>
+      <div class="flex-grow-1">
         <h1 class="page-title">Vas Service</h1>
         <div class="text-body-2 text-medium-emphasis">Customer Care operations console</div>
       </div>
+      <div class="vas-note">
+        <v-icon icon="mdi-information-outline" size="18" />
+        <span>Requests are logged in CCare activity. The live telecom connection is not enabled yet.</span>
+      </div>
     </div>
 
-    <v-alert
-      type="info"
-      variant="tonal"
-      density="compact"
-      rounded="lg"
-      class="mb-5"
-      icon="mdi-information-outline"
-      text="Every request here is recorded in the CCare activity log. The live telecom connection is not enabled yet, so actions are logged but not executed."
-    />
-
     <div class="vas-grid">
-      <!-- Subscriber / SIM -->
-      <v-card class="bordered vas-card c-teal">
-        <div class="vas-head">
-          <div class="vas-ico tone-teal"><v-icon icon="mdi-sim-outline" /></div>
-          <div>
-            <div class="vas-title">Subscriber &amp; SIM</div>
-            <div class="vas-sub">Look up and manage a SIM by MSISDN / IMSI</div>
+      <section v-for="(c, i) in CARDS" :key="c.group" class="vas-card" :style="{ '--accent': c.accent, '--i': i }">
+        <header class="vas-head">
+          <div class="vas-ico"><v-icon :icon="c.icon" size="22" /></div>
+          <div class="min-w-0">
+            <div class="vas-title">{{ c.title }}</div>
+            <div class="vas-sub">{{ c.sub }}</div>
           </div>
-        </div>
-        <v-text-field
-          v-model="forms.action.msisdn"
-          label="MSISDN"
-          variant="outlined"
-          density="comfortable"
-          prepend-inner-icon="mdi-phone-outline"
-        />
-        <v-text-field
-          v-model="forms.action.imsi"
-          label="IMSI"
-          variant="outlined"
-          density="comfortable"
-          prepend-inner-icon="mdi-identifier"
-        />
-        <v-select
-          v-model="forms.action.op"
-          :items="ACTION_OPTIONS"
-          label="Action"
-          variant="outlined"
-          density="comfortable"
-        />
-        <div class="d-flex ga-2 vas-actions">
-          <v-btn
-            class="flex-grow-1 text-none text-black font-weight-bold"
-            color="primary"
-            :loading="busy === 'action'"
-            prepend-icon="mdi-play"
-            @click="run('action')"
-            >Run</v-btn
-          >
-          <v-btn variant="tonal" class="text-none" prepend-icon="mdi-restore" @click="reset('action')">Reset</v-btn>
-        </div>
-      </v-card>
+        </header>
 
-      <!-- Service codes -->
-      <v-card class="bordered vas-card c-blue">
-        <div class="vas-head">
-          <div class="vas-ico tone-blue"><v-icon icon="mdi-cog-transfer-outline" /></div>
-          <div>
-            <div class="vas-title">Service codes</div>
-            <div class="vas-sub">IR, 5G/4G/3G, deposits, KYC, SPNV…</div>
-          </div>
+        <div class="vas-fields">
+          <v-text-field
+            v-model="forms[c.form].msisdn"
+            label="MSISDN"
+            placeholder="020…"
+            variant="outlined"
+            density="comfortable"
+            :color="c.accent"
+            prepend-inner-icon="mdi-phone-outline"
+            hide-details
+            @keyup.enter="run(c.group)"
+          />
+          <v-text-field
+            v-if="c.imsi"
+            v-model="forms.action.imsi"
+            label="IMSI"
+            variant="outlined"
+            density="comfortable"
+            :color="c.accent"
+            prepend-inner-icon="mdi-identifier"
+            hide-details
+            @keyup.enter="run(c.group)"
+          />
+          <v-autocomplete
+            v-model="forms[c.form].op"
+            :items="c.options"
+            :label="c.selectLabel"
+            variant="outlined"
+            density="comfortable"
+            :color="c.accent"
+            prepend-inner-icon="mdi-format-list-bulleted"
+            hide-details
+          />
         </div>
-        <v-text-field
-          v-model="forms.code.msisdn"
-          label="MSISDN"
-          variant="outlined"
-          density="comfortable"
-          prepend-inner-icon="mdi-phone-outline"
-        />
-        <v-select v-model="forms.code.op" :items="CODE_OPTIONS" label="Code" variant="outlined" density="comfortable" />
-        <div class="d-flex ga-2 vas-actions">
-          <v-btn
-            class="flex-grow-1 text-none text-black font-weight-bold"
-            color="primary"
-            :loading="busy === 'code'"
-            prepend-icon="mdi-play"
-            @click="run('code')"
-            >Run</v-btn
-          >
-          <v-btn variant="tonal" class="text-none" prepend-icon="mdi-restore" @click="reset('code')">Reset</v-btn>
-        </div>
-      </v-card>
 
-      <!-- Package -->
-      <v-card class="bordered vas-card c-amber">
-        <div class="vas-head">
-          <div class="vas-ico tone-amber"><v-icon icon="mdi-package-variant-closed" /></div>
-          <div>
-            <div class="vas-title">Package</div>
-            <div class="vas-sub">Assign a data package</div>
-          </div>
-        </div>
-        <v-text-field
-          v-model="forms.pkg.msisdn"
-          label="MSISDN"
-          variant="outlined"
-          density="comfortable"
-          prepend-inner-icon="mdi-phone-outline"
-        />
-        <v-select
-          v-model="forms.pkg.op"
-          :items="PACKAGE_OPTIONS"
-          label="Package"
-          variant="outlined"
-          density="comfortable"
-        />
-        <div class="d-flex ga-2 vas-actions">
+        <div class="vas-actions">
           <v-btn
-            class="flex-grow-1 text-none text-black font-weight-bold"
             color="primary"
-            :loading="busy === 'package'"
+            variant="flat"
+            height="44"
+            class="text-none text-black font-weight-bold"
+            :loading="busy === c.group"
             prepend-icon="mdi-play"
-            @click="run('package')"
+            @click="run(c.group)"
             >Run</v-btn
           >
-          <v-btn variant="tonal" class="text-none" prepend-icon="mdi-restore" @click="reset('package')">Reset</v-btn>
-        </div>
-      </v-card>
-
-      <!-- KYC -->
-      <v-card class="bordered vas-card c-violet">
-        <div class="vas-head">
-          <div class="vas-ico tone-violet"><v-icon icon="mdi-card-account-details-outline" /></div>
-          <div>
-            <div class="vas-title">KYC</div>
-            <div class="vas-sub">Show a subscriber's KYC</div>
-          </div>
-        </div>
-        <v-text-field
-          v-model="forms.kyc.msisdn"
-          label="MSISDN"
-          variant="outlined"
-          density="comfortable"
-          prepend-inner-icon="mdi-phone-outline"
-        />
-        <v-select v-model="forms.kyc.op" :items="KYC_OPTIONS" label="Action" variant="outlined" density="comfortable" />
-        <div class="d-flex ga-2 vas-actions">
           <v-btn
-            class="flex-grow-1 text-none text-black font-weight-bold"
-            color="primary"
-            :loading="busy === 'kyc'"
-            prepend-icon="mdi-play"
-            @click="run('kyc')"
-            >Run</v-btn
+            variant="outlined"
+            height="44"
+            class="text-none font-weight-medium vas-reset"
+            prepend-icon="mdi-restore"
+            @click="reset(c.group)"
+            >Reset</v-btn
           >
-          <v-btn variant="tonal" class="text-none" prepend-icon="mdi-restore" @click="reset('kyc')">Reset</v-btn>
         </div>
-      </v-card>
+      </section>
     </div>
 
     <!-- last result -->
     <v-expand-transition>
-      <v-card v-if="result" class="bordered mt-5 pa-4">
-        <div class="d-flex align-center ga-3">
-          <v-icon icon="mdi-check-circle-outline" color="success" size="26" />
-          <div>
-            <div class="font-weight-bold">{{ result.operation }}</div>
-            <div class="text-body-2 text-medium-emphasis">{{ result.message }}</div>
-          </div>
-          <v-spacer />
-          <span class="text-caption text-medium-emphasis">{{ formatDateTime(result.at) }}</span>
+      <div v-if="result" class="vas-result mt-5">
+        <v-icon icon="mdi-check-circle" color="success" size="26" />
+        <div class="min-w-0 flex-grow-1">
+          <div class="font-weight-bold">{{ result.operation }}</div>
+          <div class="text-body-2 text-medium-emphasis">{{ result.message }}</div>
         </div>
-      </v-card>
+        <span class="text-caption text-medium-emphasis">{{ formatDateTime(result.at) }}</span>
+      </div>
     </v-expand-transition>
 
     <v-snackbar v-model="snack.show" :color="snack.color" timeout="2500" location="bottom">{{ snack.text }}</v-snackbar>
@@ -340,82 +307,134 @@ function toast(text: string, color = 'success') {
 </template>
 
 <style scoped>
-.vas-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
+/* ── header ── */
+.vas-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 16px;
 }
-@media (max-width: 760px) {
+.vas-hero-ico {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  color: #1a1a1a;
+  background: linear-gradient(135deg, #ffd54a, #f2b400);
+  box-shadow: 0 8px 20px rgba(242, 180, 0, 0.28);
+}
+.vas-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  color: #2f6fd6;
+  background: rgba(47, 128, 237, 0.08);
+  border: 1px solid rgba(47, 128, 237, 0.18);
+}
+
+/* ── cards ── */
+.vas-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+@media (max-width: 860px) {
   .vas-grid {
     grid-template-columns: 1fr;
   }
 }
 .vas-card {
   position: relative;
-  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  padding: 22px 22px 20px;
+  border-radius: 20px;
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
   overflow: hidden;
-  border-radius: 18px;
   transition:
     transform 0.2s ease,
     box-shadow 0.22s ease,
     border-color 0.2s ease;
-  animation: vas-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: vas-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--i) * 70ms);
 }
-/* a soft tinted wash in the top-right corner, coloured per card */
+/* accent strip along the top edge */
 .vas-card::before {
   content: '';
   position: absolute;
-  top: -40px;
-  right: -40px;
-  width: 140px;
-  height: 140px;
+  inset: 0 0 auto;
+  height: 4px;
+  background: var(--accent);
+}
+/* soft glow in the corner */
+.vas-card::after {
+  content: '';
+  position: absolute;
+  top: -70px;
+  right: -70px;
+  width: 180px;
+  height: 180px;
   border-radius: 50%;
-  background: currentColor;
-  opacity: 0.06;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 14%, transparent), transparent);
   pointer-events: none;
 }
-.vas-card.c-teal {
-  color: #c47f00;
-}
-.vas-card.c-blue {
-  color: #2f80ed;
-}
-.vas-card.c-amber {
-  color: #e09a00;
-}
-.vas-card.c-violet {
-  color: #7c4dc4;
-}
 .vas-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  box-shadow: 0 14px 32px rgba(16, 24, 40, 0.08);
 }
-.vas-grid > .vas-card:nth-child(1) {
-  animation-delay: 0.02s;
+.vas-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
 }
-.vas-grid > .vas-card:nth-child(2) {
-  animation-delay: 0.09s;
+.vas-ico {
+  flex: none;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
 }
-.vas-grid > .vas-card:nth-child(3) {
-  animation-delay: 0.16s;
+.vas-title {
+  font-weight: 800;
+  font-size: 1.08rem;
+  line-height: 1.25;
+  color: var(--accent);
 }
-.vas-grid > .vas-card:nth-child(4) {
-  animation-delay: 0.23s;
+.vas-sub {
+  font-size: 0.82rem;
+  color: rgba(var(--v-theme-on-surface), 0.6);
 }
-@keyframes vas-in {
-  from {
-    opacity: 0;
-    transform: translateY(18px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+.min-w-0 {
+  min-width: 0;
 }
+.vas-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex-grow: 1; /* pushes the buttons to the bottom so rows line up */
+}
+/* Run and Reset: two equal columns */
 .vas-actions {
-  margin-top: 4px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 20px;
 }
 .vas-actions :deep(.v-btn) {
+  width: 100%;
+  border-radius: 12px;
+  letter-spacing: 0;
   transition:
     transform 0.16s ease,
     box-shadow 0.2s ease;
@@ -423,48 +442,37 @@ function toast(text: string, color = 'success') {
 .vas-actions :deep(.v-btn:hover) {
   transform: translateY(-1px);
 }
-.vas-head {
+.vas-reset {
+  color: rgba(var(--v-theme-on-surface), 0.75);
+  border-color: rgba(var(--v-theme-on-surface), 0.18);
+}
+
+/* ── last result ── */
+.vas-result {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 16px;
+  padding: 14px 18px;
+  border-radius: 16px;
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-theme-success), 0.35);
+  border-left-width: 4px;
 }
-.vas-ico {
-  width: 46px;
-  height: 46px;
-  border-radius: 14px;
-  display: grid;
-  place-items: center;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.04);
+
+@keyframes vas-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .vas-card {
     animation: none !important;
     transition: none !important;
   }
-}
-.vas-title {
-  font-weight: 800;
-  font-size: 1.05rem;
-}
-.vas-sub {
-  font-size: 0.8rem;
-  color: rgba(var(--v-theme-on-surface), 0.6);
-}
-.tone-teal {
-  background: rgba(255, 179, 0, 0.18);
-  color: #c47f00;
-}
-.tone-blue {
-  background: rgba(47, 128, 237, 0.14);
-  color: #2f80ed;
-}
-.tone-amber {
-  background: rgba(237, 161, 0, 0.16);
-  color: #e09a00;
-}
-.tone-violet {
-  background: rgba(124, 77, 196, 0.16);
-  color: #7c4dc4;
 }
 </style>

@@ -5,8 +5,8 @@
   "type": "module",
   "main": "src/server.js",
   "scripts": {
-    "dev": "ENV_FILE=.env.production node --watch src/server.js",
-    "dev:pg": "node --watch src/server.js",
+    "dev": "node --watch src/server.js",
+    "dev:mssql": "ENV_FILE=.env.production node --watch src/server.js",
     "start": "NODE_ENV=production node src/server.js",
     "seed:admin": "node src/scripts/create-admin.js",
     "lint": "eslint .",

@@ -6,7 +6,7 @@ import type { CcareUser } from '~/types/api'
  * Everyone logged in can view; a CCare administrator or a MyTPlus admin can add,
  * edit, reset passwords and close/reopen accounts.
  */
-useHead({ title: 'CCare accounts' })
+useHead({ title: 'CCare users' })
 const api = useApi()
 const { admin: me } = useAuth()
 const canManage = computed(() => me.value?.role === 'admin' || me.value?.canManage === true)
@@ -207,7 +207,7 @@ function toast(text: string, color = 'success') {
   <div>
     <div class="d-flex flex-wrap align-center ga-3 mb-6">
       <div>
-        <h1 class="page-title">CCare accounts</h1>
+        <h1 class="page-title">CCare users</h1>
         <div class="text-body-2 text-medium-emphasis">Staff who can log in to My CCare</div>
       </div>
     </div>

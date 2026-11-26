@@ -86,6 +86,15 @@ const schema = z.object({
   //   proxy  → the existing My CCare API only (real accounts; our own won't work)
   //   local  → our own md5 + SMS only (MyTPlus-created accounts)
   //   hybrid → try the My CCare API first, fall back to our own md5 (both work)
+  // Server activity agent (deploy/server-agent): shared secret it sends in
+  // `x-agent-key`. Empty → the agent endpoint is switched off.
+  SERVER_AGENT_KEY: z
+    .string()
+    .default('')
+    .refine((v) => v === '' || v.length >= 24, 'SERVER_AGENT_KEY must be at least 24 characters'),
+  // After this many seconds without a heartbeat an agent is shown as silent.
+  SERVER_AGENT_STALE_SECONDS: z.coerce.number().int().positive().default(180),
+
   CCARE_AUTH_MODE: z.enum(['proxy', 'local', 'hybrid']).default('hybrid'),
   CCARE_AUTH_URL: z.string().default('http://10.30.6.94:5151'),
   CCARE_LOGIN_PATH: z.string().default('/api/8'),
@@ -159,6 +168,8 @@ export const config = Object.freeze({
       .map((s) => s.trim())
       .filter(Boolean),
   }),
+
+  serverAgent: Object.freeze({ key: env.SERVER_AGENT_KEY, staleMs: env.SERVER_AGENT_STALE_SECONDS * 1000 }),
 
   // CCare login: delegate to the existing My CCare API ('proxy') or own it ('local').
   ccareAuth: Object.freeze({

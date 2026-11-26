@@ -21,6 +21,8 @@ import ccareRoutes from './ccare.routes.js';
 import eventRoutes from './event.routes.js';
 import settingsRoutes from './settings.routes.js';
 import sqlConsoleRoutes from './sql-console.routes.js';
+import serverLogRoutes from './server-log.routes.js';
+import serverRoutes from './server.routes.js';
 import statsRoutes from './stats.routes.js';
 import userRoutes from './user.routes.js';
 
@@ -83,6 +85,8 @@ router.use('/users', userRoutes);
 router.use('/events', eventRoutes);
 router.use('/settings', settingsRoutes);
 router.use('/sql', sqlConsoleRoutes);
+router.use('/server-logs', serverLogRoutes);
+router.use('/server', serverRoutes);
 router.use('/ccare', ccareRoutes);
 
 export default router;

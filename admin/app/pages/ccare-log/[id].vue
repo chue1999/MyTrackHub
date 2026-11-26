@@ -37,6 +37,14 @@ const LABELS: Record<string, string> = {
   password_reset_by_admin: 'Password reset by admin',
   import: 'Accounts imported',
   vas: 'Vas Service',
+  tplus_esim_register: 'E-SIM registered',
+  tplus_nice_confirm: 'Nice number confirmed',
+  tplus_pool_approve: 'Number approved',
+  log_deleted: 'Log entry deleted',
+  logs_cleared: 'Logs cleared',
+  admin_account_delete: 'Admin account deleted',
+  events_purged: 'Old app events deleted',
+  sql_delete: 'SQL delete run',
 }
 const ICONS: Record<string, string> = {
   login_ok: 'mdi-login-variant',
@@ -54,13 +62,21 @@ const ICONS: Record<string, string> = {
   account_close: 'mdi-account-cancel-outline',
   account_reopen: 'mdi-account-check-outline',
   vas: 'mdi-cellphone-cog',
+  tplus_esim_register: 'mdi-sim-outline',
+  tplus_nice_confirm: 'mdi-star-check-outline',
+  tplus_pool_approve: 'mdi-check-decagram-outline',
+  log_deleted: 'mdi-trash-can-outline',
+  logs_cleared: 'mdi-broom',
+  admin_account_delete: 'mdi-account-remove-outline',
+  events_purged: 'mdi-delete-clock-outline',
+  sql_delete: 'mdi-database-remove-outline',
 }
 function label(a: string) {
   return LABELS[a] ?? a
 }
 const icon = (a: string) => ICONS[a] ?? 'mdi-circle-small'
 function actionColor(a: string) {
-  if (a.includes('fail') || a.includes('close') || a.includes('blocked') || a.includes('expired')) return 'error'
+  if (['fail', 'close', 'blocked', 'expired', 'delete', 'clear', 'purge'].some((w) => a.includes(w))) return 'error'
   if (a === 'login_ok' || a === 'account_create' || a.includes('reset') || a.includes('reopen')) return 'success'
   return 'info'
 }
@@ -79,7 +95,7 @@ const prettyDetail = (d: Record<string, unknown> | null) => (d ? JSON.stringify(
 const router = useRouter()
 function back() {
   if (window.history.length > 1) router.back()
-  else navigateTo('/ccare-logs')
+  else navigateTo('/logs?tab=ccare')
 }
 </script>
 

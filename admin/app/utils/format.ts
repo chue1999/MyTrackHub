@@ -366,3 +366,29 @@ export function rangeText(r: { from: string; to: string }) {
   if (r.from && r.to) return `${f(r.from)} – ${f(r.to)}`
   return r.from ? `from ${f(r.from)}` : `until ${f(r.to)}`
 }
+
+/** 1536 → "1.5 KB" (base 1024). */
+export function formatBytes(n?: number | null, digits = 1) {
+  if (n === null || n === undefined || Number.isNaN(n)) return '—'
+  const u = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
+  let i = 0
+  let v = Math.abs(n)
+  while (v >= 1024 && i < u.length - 1) {
+    v /= 1024
+    i++
+  }
+  return `${n < 0 ? '-' : ''}${v.toFixed(i ? digits : 0)} ${u[i]}`
+}
+
+/** 93784 seconds → "1d 2h 3m". */
+export function formatDuration(seconds?: number | null) {
+  if (seconds === null || seconds === undefined) return '—'
+  const s = Math.max(0, Math.floor(seconds))
+  const d = Math.floor(s / 86400)
+  const h = Math.floor((s % 86400) / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  if (d) return `${d}d ${h}h ${m}m`
+  if (h) return `${h}h ${m}m`
+  if (m) return `${m}m ${s % 60}s`
+  return `${s}s`
+}

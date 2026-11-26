@@ -66,7 +66,7 @@ function onEnter() {
   if (!term) return
   if (active.value >= 0 && flat.value[active.value]) return go(flat.value[active.value]!.to)
   // No selection: show everything that matches in the activity log.
-  go(`/events?search=${encodeURIComponent(term)}`)
+  go(`/logs?tab=mytplus&search=${encodeURIComponent(term)}`)
 }
 function move(d: number) {
   if (!flat.value.length) return
@@ -185,7 +185,7 @@ const showPanel = computed(() => open.value && q.value.trim().length >= 2)
             <span class="row-meta text-mono">{{ formatTime(e.occurredAt) }}</span>
           </a>
           <div v-if="!events.length && !loading" class="empty">No actions match</div>
-          <a class="more" @mousedown.prevent="go(`/events?search=${encodeURIComponent(q.trim())}`)">
+          <a class="more" @mousedown.prevent="go(`/logs?tab=mytplus&search=${encodeURIComponent(q.trim())}`)">
             See all {{ totals.events }} actions in the activity log <v-icon icon="mdi-arrow-right" size="14" />
           </a>
         </div>

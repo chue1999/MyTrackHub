@@ -1,0 +1,19 @@
+# /etc/systemd/system/mytrackhub-agent.service
+[Unit]
+Description=MyTrackHub server agent (server activity + cache clearing)
+After=network-online.target auditd.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/mytrackhub-agent.env
+ExecStart=/usr/bin/env node /opt/mytrackhub-agent/agent.mjs
+Restart=always
+RestartSec=5
+# Runs as root: it reads /var/log/audit and clears system caches.
+User=root
+NoNewPrivileges=true
+PrivateTmp=false
+
+[Install]
+WantedBy=multi-user.target

@@ -43,8 +43,44 @@ onMounted(async () => {
 const isCcare = computed(() => admin.value?.kind === 'ccare')
 const canManageCcare = computed(() => admin.value?.role === 'admin' || admin.value?.canManage === true)
 
-// CCare lives as its own sidebar pages. Managers get all three; plain staff just
-// the Service console. Each has its own active matcher so only one highlights.
+// TPLUS service pages (ported from the legacy PHP app). Available to every
+// signed-in CCare member and to MyTPlus admins; each submit is logged.
+const tplusNav = [
+  {
+    title: 'Register E-SIM',
+    icon: 'mdi-sim-outline',
+    activeIcon: 'mdi-sim',
+    to: '/tplus-esim-register',
+    active: (p: string) => p.startsWith('/tplus-esim-register'),
+  },
+  {
+    title: 'Confirm Nice Number',
+    icon: 'mdi-star-check-outline',
+    activeIcon: 'mdi-star-check',
+    to: '/tplus-nice-confirm',
+    active: (p: string) => p.startsWith('/tplus-nice-confirm'),
+  },
+  {
+    title: 'Approve Add/Delete',
+    icon: 'mdi-check-decagram-outline',
+    activeIcon: 'mdi-check-decagram',
+    to: '/tplus-pool-approve',
+    active: (p: string) => p.startsWith('/tplus-pool-approve'),
+  },
+]
+
+// One Logs page with a tab per log (MyTPlus / CCare). Admins only: a MyTPlus
+// admin sees both tabs, a CCare admin just the CCare tab.
+const logsItem = {
+  title: 'Logs',
+  icon: 'mdi-clipboard-text-clock-outline',
+  activeIcon: 'mdi-clipboard-text-clock',
+  to: '/logs',
+  active: (p: string) =>
+    p.startsWith('/logs') || p.startsWith('/events') || p.startsWith('/ccare-log/') || p === '/ccare-logs',
+}
+
+// CCare pages. Managers get the full console; plain staff just the Service console.
 const ccareNav = computed(() =>
   canManageCcare.value
     ? [
@@ -55,20 +91,6 @@ const ccareNav = computed(() =>
           to: '/ccare-vas',
           active: (p: string) => p.startsWith('/ccare-vas'),
         },
-        {
-          title: 'CCare accounts',
-          icon: 'mdi-account-group-outline',
-          activeIcon: 'mdi-account-group',
-          to: '/ccare',
-          active: (p: string) => p === '/ccare' || p.startsWith('/ccare-user'),
-        },
-        {
-          title: 'CCare activity',
-          icon: 'mdi-clipboard-text-clock-outline',
-          activeIcon: 'mdi-clipboard-text-clock',
-          to: '/ccare-logs',
-          active: (p: string) => p.startsWith('/ccare-logs'),
-        },
       ]
     : [
         {
@@ -76,46 +98,67 @@ const ccareNav = computed(() =>
           icon: 'mdi-headset',
           activeIcon: 'mdi-headset',
           to: '/ccare-vas',
-          active: (p: string) => p.startsWith('/ccare'),
+          active: (p: string) => p.startsWith('/ccare-vas'),
         },
       ],
 )
 
-// CCare staff see only the CCare pages; MyTPlus admins see everything plus CCare.
-const nav = computed(() =>
-  isCcare.value
-    ? ccareNav.value
-    : [
-        { title: 'Dashboard', icon: 'mdi-view-dashboard-outline', activeIcon: 'mdi-view-dashboard', to: '/' },
-        { title: 'Users', icon: 'mdi-account-group-outline', activeIcon: 'mdi-account-group', to: '/users' },
-        { title: 'Activity log', icon: 'mdi-timeline-text-outline', activeIcon: 'mdi-timeline-text', to: '/events' },
-        { title: 'App features', icon: 'mdi-apps', activeIcon: 'mdi-apps', to: '/features' },
-        { title: 'Packages', icon: 'mdi-package-variant', activeIcon: 'mdi-package-variant-closed', to: '/packages' },
-        { title: 'Reports', icon: 'mdi-file-chart-outline', activeIcon: 'mdi-file-chart', to: '/reports' },
-        ...ccareNav.value,
-      ],
+// CCare user management lives under Settings (managers / MyTPlus admins only).
+const ccareUsersItem = {
+  title: 'CCare users',
+  icon: 'mdi-account-group-outline',
+  activeIcon: 'mdi-account-group',
+  to: '/ccare',
+  active: (p: string) => p === '/ccare' || p.startsWith('/ccare-user'),
+}
+const ccareSettingsNav = computed(() => (canManageCcare.value ? [ccareUsersItem] : []))
+
+const overviewNav = [
+  { title: 'Dashboard', icon: 'mdi-view-dashboard-outline', activeIcon: 'mdi-view-dashboard', to: '/' },
+  { title: 'Users', icon: 'mdi-account-group-outline', activeIcon: 'mdi-account-group', to: '/users' },
+  { title: 'App features', icon: 'mdi-apps', activeIcon: 'mdi-apps', to: '/features' },
+  { title: 'Packages', icon: 'mdi-package-variant', activeIcon: 'mdi-package-variant-closed', to: '/packages' },
+  { title: 'Reports', icon: 'mdi-file-chart-outline', activeIcon: 'mdi-file-chart', to: '/reports' },
+]
+const settingsNav = computed(() => [
+  { title: 'Settings', icon: 'mdi-cog-outline', activeIcon: 'mdi-cog', to: '/settings' },
+  ...ccareSettingsNav.value,
+  ...(admin.value?.role === 'admin'
+    ? [
+        {
+          title: 'Admin accounts',
+          icon: 'mdi-shield-account-outline',
+          activeIcon: 'mdi-shield-account',
+          to: '/accounts',
+        },
+        { title: 'SQL Query', icon: 'mdi-database-search-outline', activeIcon: 'mdi-database-search', to: '/sql' },
+        { title: 'Server', icon: 'mdi-server-outline', activeIcon: 'mdi-server', to: '/server' },
+      ]
+    : []),
+])
+
+// Logs get their own group above Settings: MyTPlus admins and CCare admins only.
+const logsNav = computed(() =>
+  (isCcare.value ? admin.value?.canManage === true : admin.value?.role === 'admin') ? [logsItem] : [],
 )
-const adminNav = computed(() =>
+const logsSection = computed(() => (logsNav.value.length ? [{ label: 'Logs', items: logsNav.value }] : []))
+
+// The sidebar is grouped into labelled sections. CCare staff see only CCare,
+// TPLUS and (managers) Settings; MyTPlus admins see everything, each group under its own heading.
+const sections = computed(() =>
   isCcare.value
-    ? []
+    ? [
+        { label: 'CCare', items: ccareNav.value },
+        { label: 'TPLUS Services', items: tplusNav },
+        ...logsSection.value,
+        ...(ccareSettingsNav.value.length ? [{ label: 'Settings', items: ccareSettingsNav.value }] : []),
+      ]
     : [
-        { title: 'Settings', icon: 'mdi-cog-outline', activeIcon: 'mdi-cog', to: '/settings' },
-        ...(admin.value?.role === 'admin'
-          ? [
-              {
-                title: 'Admin accounts',
-                icon: 'mdi-shield-account-outline',
-                activeIcon: 'mdi-shield-account',
-                to: '/accounts',
-              },
-              {
-                title: 'SQL Query',
-                icon: 'mdi-database-search-outline',
-                activeIcon: 'mdi-database-search',
-                to: '/sql',
-              },
-            ]
-          : []),
+        { label: 'Overview', items: overviewNav },
+        { label: 'CCare', items: ccareNav.value },
+        { label: 'TPLUS Services', items: tplusNav },
+        ...logsSection.value,
+        { label: 'Settings', items: settingsNav.value },
       ],
 )
 const roleLabel = computed(() =>
@@ -149,19 +192,11 @@ const displayName = computed(() => admin.value?.displayName || admin.value?.user
         </div>
       </div>
 
-      <div class="nav-label">Overview</div>
-      <nav class="nav">
-        <NuxtLink v-for="item in nav" :key="item.to" :to="item.to" class="nav-item" :class="{ active: isActive(item) }">
-          <v-icon :icon="isActive(item) ? item.activeIcon : item.icon" size="20" />
-          <span>{{ item.title }}</span>
-        </NuxtLink>
-      </nav>
-
-      <template v-if="adminNav.length">
-        <div class="nav-label">Settings</div>
-        <nav class="nav">
+      <template v-for="section in sections" :key="section.label">
+        <div v-if="section.items.length" class="nav-label">{{ section.label }}</div>
+        <nav v-if="section.items.length" class="nav">
           <NuxtLink
-            v-for="item in adminNav"
+            v-for="item in section.items"
             :key="item.to"
             :to="item.to"
             class="nav-item"

@@ -1,5 +1,7 @@
 import crypto from 'node:crypto';
+import { Op } from 'sequelize';
 import { isMssql, sequelize } from '../db/index.js';
+import { CcareAccountDev } from '../models/ccare-account-dev.model.js';
 import { HttpError } from '../utils/http-error.js';
 
 /**
@@ -8,9 +10,18 @@ import { HttpError } from '../utils/http-error.js';
  *
  * Raw SQL on purpose: this is an external table we must not let Sequelize's sync
  * create, alter or drop, so it is never defined as a model. Only SQL Server (prod)
- * has it; in development (PostgreSQL) CCare is simply off.
+ * has it; in development (PostgreSQL) a local stand-in table (CcareAccountDev)
+ * backs the same operations so the whole CCare flow can be tested in dev.
  */
-export const ccareEnabled = isMssql;
+// CCare is available in production (SQL Server) and, via the dev stand-in table,
+// in development (PostgreSQL) too.
+export const ccareEnabled = true;
+// When false we are on PostgreSQL (dev) and use the CcareAccountDev model.
+const useDev = !isMssql;
+// True when CCare is backed by the local dev table (PostgreSQL). The sign-in
+// flow uses this to stay fully local (skip the My CCare proxy) so accounts
+// created here log in with their own md5 password + a local OTP.
+export const ccareDev = useDev;
 const TABLE = '[Tb_User_detail]';
 
 const md5 = (text) => crypto.createHash('md5').update(String(text), 'utf8').digest('hex');
@@ -55,9 +66,11 @@ async function one(sql, replacements) {
 
 /** Find an account by its exact login name (used by the login flow). */
 async function rowByName(name) {
+  if (useDev) return CcareAccountDev.findOne({ where: { Name: name }, raw: true });
   return one(`SELECT TOP (1) * FROM ${TABLE} WHERE Name = :name`, { name });
 }
 async function rowById(id) {
+  if (useDev) return CcareAccountDev.findOne({ where: { ID: Number(id) }, raw: true });
   return one(`SELECT TOP (1) * FROM ${TABLE} WHERE ID = :id`, { id });
 }
 
@@ -91,9 +104,40 @@ export async function getActiveById(id) {
   return toPublic(row);
 }
 
+/** Dev (PostgreSQL) list over the local CcareAccountDev stand-in table. */
+async function listDev({ search = '', page = 1, pageSize = 50 }) {
+  const where = search
+    ? {
+        [Op.or]: ['Name', 'Name_la', 'Staffid', 'Division', 'POSITION'].map((f) => ({
+          [f]: { [Op.iLike]: `%${search}%` },
+        })),
+      }
+    : {};
+  const size = Math.min(Math.max(Number(pageSize) || 50, 1), 200);
+  const current = Math.max(Number(page) || 1, 1);
+  const { rows, count } = await CcareAccountDev.findAndCountAll({
+    where,
+    order: [['ID', 'DESC']],
+    limit: size,
+    offset: (current - 1) * size,
+    raw: true,
+  });
+  const all = await CcareAccountDev.findAll({ where, raw: true });
+  const active = all.filter(isActive).length;
+  const managers = all.filter((r) => isActive(r) && (r.Descrip || '').toLowerCase() === 'admin').length;
+  return {
+    rows: rows.map(toPublic),
+    total: count,
+    page: current,
+    pageSize: size,
+    counts: { total: count, active, managers, closed: count - active },
+  };
+}
+
 /** List accounts for the CCare page, newest first, optional name/staff search. */
 export async function list({ search = '', page = 1, pageSize = 50 } = {}) {
   ensureEnabled();
+  if (useDev) return listDev({ search, page, pageSize });
   const where = search
     ? `WHERE Name LIKE :like OR Name_la LIKE :like OR Staffid LIKE :like OR Division LIKE :like OR [POSITION] LIKE :like`
     : '';
@@ -153,6 +197,24 @@ export async function create(data) {
     throw HttpError.badRequest('Password must be at least 4 characters');
   if (await rowByName(name)) throw HttpError.conflict(`The name "${name}" is already taken`);
 
+  if (useDev) {
+    const row = await CcareAccountDev.create({
+      Name: name,
+      Password: md5(data.password),
+      Descrip: data.descrip === 'Admin' ? 'Admin' : 'user',
+      Status: data.descrip === 'Admin' ? '3' : '2',
+      Name_la: clean(data.nameLa),
+      ANB: 56,
+      BrandID: clean(data.brandId) ?? '',
+      Division: clean(data.division),
+      POSITION: clean(data.position),
+      Staffid: clean(data.staffId),
+      stafftel: clean(data.staffTel),
+      role_CRM: clean(data.roleCrm),
+    });
+    return getById(row.ID);
+  }
+
   // Assign the ID and insert in one transaction (the table has no identity); then
   // read the row back on the normal connection, after the row is committed.
   const id = await sequelize.transaction(async (transaction) => {
@@ -192,6 +254,18 @@ export async function create(data) {
 export async function update(id, data) {
   ensureEnabled();
   if (!(await rowById(id))) throw HttpError.notFound('Account not found');
+  if (useDev) {
+    const patch = {};
+    if (data.nameLa !== undefined) patch.Name_la = clean(data.nameLa);
+    if (data.division !== undefined) patch.Division = clean(data.division);
+    if (data.position !== undefined) patch.POSITION = clean(data.position);
+    if (data.staffId !== undefined) patch.Staffid = clean(data.staffId);
+    if (data.staffTel !== undefined) patch.stafftel = clean(data.staffTel);
+    if (data.brandId !== undefined) patch.BrandID = clean(data.brandId) ?? '';
+    if (data.descrip !== undefined) patch.Descrip = data.descrip === 'Admin' ? 'Admin' : 'user';
+    if (Object.keys(patch).length) await CcareAccountDev.update(patch, { where: { ID: Number(id) } });
+    return getById(id);
+  }
   const set = [];
   const replacements = { id };
   const field = (col, key, value) => {
@@ -216,6 +290,13 @@ export async function resetPassword(id, newPassword) {
   if (!newPassword || String(newPassword).length < 4)
     throw HttpError.badRequest('Password must be at least 4 characters');
   if (!(await rowById(id))) throw HttpError.notFound('Account not found');
+  if (useDev) {
+    await CcareAccountDev.update(
+      { Password: md5(newPassword), ANB: 56, TimeResetPassWord: new Date() },
+      { where: { ID: Number(id) } },
+    );
+    return getById(id);
+  }
   await sequelize.query(
     `UPDATE ${TABLE} SET Password = :pw, ANB = 56, TimeResetPassWord = SYSDATETIME() WHERE ID = :id`,
     { replacements: { pw: md5(newPassword), id } },
@@ -227,6 +308,10 @@ export async function resetPassword(id, newPassword) {
 export async function setActive(id, active) {
   ensureEnabled();
   if (!(await rowById(id))) throw HttpError.notFound('Account not found');
+  if (useDev) {
+    await CcareAccountDev.update({ ANB: active ? 56 : 99 }, { where: { ID: Number(id) } });
+    return getById(id);
+  }
   await sequelize.query(`UPDATE ${TABLE} SET ANB = :anb WHERE ID = :id`, {
     replacements: { anb: active ? 56 : 99, id },
   });
