@@ -47,10 +47,10 @@ export function assertCanText(phone) {
   if (!phone) throw HttpError.badRequest('Enter the phone number: the password is sent to it by SMS.');
   // In production the password is only ever delivered by SMS: without a gateway
   // nobody would receive it, so refuse instead of creating an unusable account.
-  if (!config.sms.enabled && config.isProduction) {
+  if (!config.smsPassword.enabled && config.isProduction) {
     throw new HttpError(
       503,
-      'SMS is not set up on this server (SMS_URL and SMS_APIKEY in api/.env.production), so the password cannot be sent.',
+      'SMS is not set up on this server (SMS_URL or SMS_PASSWORD_URL in api/.env.production), so the password cannot be sent.',
     );
   }
   if (!textable(phone)) {
@@ -70,8 +70,11 @@ export async function deliverPassword({ user, password, reason, actor, ip }) {
       ? `MyTPlus CCare: your account "${user.name}" is ready. Password: ${password} . Sign in, then confirm with the SMS code.`
       : `MyTPlus CCare: new password for "${user.name}": ${password} . Do not share it.`;
   let gateway = 'disabled';
-  if (config.sms.enabled) {
-    const r = await sendSms(normalizePhone(user.staffTel), content).catch((err) => ({ ok: false, error: err.message }));
+  if (config.smsPassword.enabled) {
+    const r = await sendSms(normalizePhone(user.staffTel), content, config.smsPassword).catch((err) => ({
+      ok: false,
+      error: err.message,
+    }));
     gateway = r.ok ? 'sent' : `error:${r.status ?? r.error ?? ''}`;
     if (!r.ok) {
       await logCcare({
@@ -95,8 +98,8 @@ export async function deliverPassword({ user, password, reason, actor, ip }) {
     ip,
     detail: { reason, phoneHint: maskPhone(user.staffTel), gateway },
   });
-  const out = { phoneHint: maskPhone(user.staffTel), sent: config.sms.enabled };
-  if (!config.sms.enabled && !config.isProduction) out.devPassword = password;
+  const out = { phoneHint: maskPhone(user.staffTel), sent: config.smsPassword.enabled };
+  if (!config.smsPassword.enabled && !config.isProduction) out.devPassword = password;
   return out;
 }
 

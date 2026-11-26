@@ -76,6 +76,12 @@ const schema = z.object({
   SMS_FROM: z.string().default('TPLUS'),
   // Lao mobiles are stored as 20xxxxxxxx; the gateway may want 85620xxxxxxxx.
   SMS_COUNTRY_CODE: z.string().default(''),
+  // Optional separate settings for NewPassword SMS (account created / new password).
+  // Each one falls back to the SMS_ value above when empty.
+  SMS_PASSWORD_URL: z.string().default(''),
+  SMS_PASSWORD_APIKEY: z.string().default(''),
+  SMS_PASSWORD_USER: z.string().default(''),
+  SMS_PASSWORD_FROM: z.string().default(''),
   OTP_TTL_SECONDS: z.coerce.number().int().positive().default(300),
   OTP_LENGTH: z.coerce.number().int().min(4).max(8).default(6),
   // Comma-separated phone numbers that always receive a REAL SMS while testing;
@@ -162,6 +168,15 @@ export const config = Object.freeze({
     apiKey: env.SMS_APIKEY,
     user: env.SMS_USER,
     from: env.SMS_FROM,
+    countryCode: env.SMS_COUNTRY_CODE,
+  }),
+  // NewPassword SMS: own gateway settings when given, otherwise the same as above.
+  smsPassword: Object.freeze({
+    enabled: !!(env.SMS_PASSWORD_URL || env.SMS_URL),
+    url: env.SMS_PASSWORD_URL || env.SMS_URL,
+    apiKey: env.SMS_PASSWORD_APIKEY || env.SMS_APIKEY,
+    user: env.SMS_PASSWORD_USER || env.SMS_USER,
+    from: env.SMS_PASSWORD_FROM || env.SMS_FROM,
     countryCode: env.SMS_COUNTRY_CODE,
   }),
   otp: Object.freeze({

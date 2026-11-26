@@ -19,22 +19,20 @@ export function normalizePhone(raw) {
 }
 
 /**
- * Sends one message. Returns { ok, status, response }.
+ * Sends one message through `gw` (config.sms for OTP codes, config.smsPassword
+ * for NewPassword messages). Returns { ok, status, response }.
  * Throws only on a transport error (the caller logs the outcome).
  */
-export function sendSms(to, content) {
-  if (!config.sms.enabled) {
-    logger.warn(
-      { hasUrl: !!config.sms.url, hasApiKey: !!config.sms.apiKey },
-      'SMS not sent: gateway disabled (set SMS_URL to enable)',
-    );
+export function sendSms(to, content, gw = config.sms) {
+  if (!gw.enabled) {
+    logger.warn({ hasUrl: !!gw.url, hasApiKey: !!gw.apiKey }, 'SMS not sent: gateway disabled (set SMS_URL to enable)');
     return Promise.resolve({ ok: false, skipped: true, response: 'SMS gateway not configured' });
   }
-  const url = new URL(config.sms.url);
+  const url = new URL(gw.url);
   const body = JSON.stringify({
     TransactionID: `sv94${new Date().toISOString().replace(/\D/g, '').slice(0, 17)}`,
-    User: config.sms.user,
-    Header: config.sms.from,
+    User: gw.user,
+    Header: gw.from,
     To: to,
     Content: content,
   });
@@ -50,7 +48,7 @@ export function sendSms(to, content) {
         headers: {
           'Content-Type': 'application/json',
           // Only when a key is configured (the internal gateway may not need one).
-          ...(config.sms.apiKey ? { apikey: config.sms.apiKey } : {}),
+          ...(gw.apiKey ? { apikey: gw.apiKey } : {}),
           'Content-Length': Buffer.byteLength(body),
         },
         timeout: 15000,
