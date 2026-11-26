@@ -9,7 +9,9 @@ import {
   summary,
   userSummary,
 } from '../services/ccare-log.service.js';
+import { assertCanText, deliverPassword } from '../services/ccare-auth.service.js';
 import { HttpError } from '../utils/http-error.js';
+import { generatePassword } from '../utils/password.js';
 import * as ccare from '../services/ccare.service.js';
 
 /** Writes an audit entry for a management action (by an admin or a CCare manager). */
@@ -41,11 +43,23 @@ export async function detail(req, res) {
   res.json({ user, summary: s });
 }
 
-/** POST /ccare/users */
+/**
+ * POST /ccare/users — the system generates the password (8 characters: upper,
+ * lower, digit) and texts it to the staff phone. Nobody types or sees it.
+ */
 export async function create(req, res) {
-  const user = await ccare.create(req.body);
+  assertCanText(req.body.staffTel); // check before creating anything
+  const password = generatePassword();
+  const user = await ccare.create({ ...req.body, password });
   await audit(req, 'account_create', user);
-  res.status(201).json(user);
+  let delivery;
+  try {
+    delivery = await deliverPassword({ user, password, reason: 'create', actor: req.me.username, ip: ipOf(req) });
+  } catch (err) {
+    // The account exists; the admin can resend with "Send new password".
+    return res.status(201).json({ ...user, passwordSent: false, passwordError: err.message });
+  }
+  res.status(201).json({ ...user, passwordSent: true, ...delivery });
 }
 
 /** PATCH /ccare/users/:id */
@@ -55,11 +69,22 @@ export async function update(req, res) {
   res.json(user);
 }
 
-/** POST /ccare/users/:id/password */
+/**
+ * POST /ccare/users/:id/password — a new generated password, texted to the
+ * staff phone (also reopens a closed account).
+ */
 export async function resetPassword(req, res) {
-  const user = await ccare.resetPassword(Number(req.params.id), req.body.newPassword);
+  const id = Number(req.params.id);
+  const current = await ccare.getById(id);
+  if (!current.staffTel) {
+    throw HttpError.badRequest('This account has no phone number. Add it with Edit, then send a new password.');
+  }
+  assertCanText(current.staffTel);
+  const password = generatePassword();
+  const user = await ccare.resetPassword(id, password);
   await audit(req, 'password_reset_by_admin', user);
-  res.json(user);
+  const delivery = await deliverPassword({ user, password, reason: 'reset', actor: req.me.username, ip: ipOf(req) });
+  res.json({ ...user, passwordSent: true, ...delivery });
 }
 
 /** POST /ccare/users/:id/active */

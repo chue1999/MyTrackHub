@@ -185,6 +185,16 @@ export async function getById(id) {
 
 const clean = (v) => (v === undefined || v === '' ? null : v);
 
+/** SQL Server rejects a value longer than its column: say which, instead of a 500. */
+function tooLong(err) {
+  const msg = err?.original?.message || err?.parent?.message || err?.message || '';
+  if (!/truncated/i.test(msg)) return err;
+  const col = msg.match(/column '([^']+)'/i)?.[1];
+  return HttpError.badRequest(
+    `${col ? `"${col}"` : 'A value'} is too long for the CCare database column. Shorten it, or ask the DBA to widen the column.`,
+  );
+}
+
 /**
  * Create an account. ID is assigned here because the table has no identity.
  * `descrip` is 'user' unless an administrator creates an 'Admin'.
@@ -192,9 +202,8 @@ const clean = (v) => (v === undefined || v === '' ? null : v);
 export async function create(data) {
   ensureEnabled();
   const name = String(data.name || '').trim();
-  if (!name) throw HttpError.badRequest('Enter a login name');
-  if (!data.password || String(data.password).length < 4)
-    throw HttpError.badRequest('Password must be at least 4 characters');
+  if (!name) throw HttpError.badRequest('Enter a username');
+  if (!data.password) throw HttpError.badRequest('A password is required');
   if (await rowByName(name)) throw HttpError.conflict(`The name "${name}" is already taken`);
 
   if (useDev) {
@@ -217,36 +226,40 @@ export async function create(data) {
 
   // Assign the ID and insert in one transaction (the table has no identity); then
   // read the row back on the normal connection, after the row is committed.
-  const id = await sequelize.transaction(async (transaction) => {
-    const [[next]] = await sequelize.query(`SELECT ISNULL(MAX(ID), 0) + 1 AS id FROM ${TABLE} WITH (TABLOCKX)`, {
-      transaction,
-    });
-    await sequelize.query(
-      `INSERT INTO ${TABLE}
+  const id = await sequelize
+    .transaction(async (transaction) => {
+      const [[next]] = await sequelize.query(`SELECT ISNULL(MAX(ID), 0) + 1 AS id FROM ${TABLE} WITH (TABLOCKX)`, {
+        transaction,
+      });
+      await sequelize.query(
+        `INSERT INTO ${TABLE}
          (ID, Name, Password, Descrip, Status, cdate, Name_la, ANB, BrandID, Division, [POSITION], Staffid, stafftel, role_CRM)
        VALUES
          (:id, :name, :password, :descrip, :status, SYSDATETIME(), :nameLa, :anb, :brandId, :division, :position, :staffId, :staffTel, :roleCrm)`,
-      {
-        transaction,
-        replacements: {
-          id: next.id,
-          name,
-          password: md5(data.password),
-          descrip: data.descrip === 'Admin' ? 'Admin' : 'user',
-          status: data.descrip === 'Admin' ? '3' : '2',
-          nameLa: clean(data.nameLa),
-          anb: 56,
-          brandId: clean(data.brandId) ?? '',
-          division: clean(data.division),
-          position: clean(data.position),
-          staffId: clean(data.staffId),
-          staffTel: clean(data.staffTel),
-          roleCrm: clean(data.roleCrm),
+        {
+          transaction,
+          replacements: {
+            id: next.id,
+            name,
+            password: md5(data.password),
+            descrip: data.descrip === 'Admin' ? 'Admin' : 'user',
+            status: data.descrip === 'Admin' ? '3' : '2',
+            nameLa: clean(data.nameLa),
+            anb: 56,
+            brandId: clean(data.brandId) ?? '',
+            division: clean(data.division),
+            position: clean(data.position),
+            staffId: clean(data.staffId),
+            staffTel: clean(data.staffTel),
+            roleCrm: clean(data.roleCrm),
+          },
         },
-      },
-    );
-    return next.id;
-  });
+      );
+      return next.id;
+    })
+    .catch((err) => {
+      throw tooLong(err);
+    });
   return getById(id);
 }
 
@@ -280,15 +293,16 @@ export async function update(id, data) {
   if (data.brandId !== undefined) field('BrandID', 'brandId', clean(data.brandId) ?? '');
   if (data.descrip !== undefined) field('Descrip', 'descrip', data.descrip === 'Admin' ? 'Admin' : 'user');
   if (!set.length) return getById(id);
-  await sequelize.query(`UPDATE ${TABLE} SET ${set.join(', ')} WHERE ID = :id`, { replacements });
+  await sequelize.query(`UPDATE ${TABLE} SET ${set.join(', ')} WHERE ID = :id`, { replacements }).catch((err) => {
+    throw tooLong(err);
+  });
   return getById(id);
 }
 
 /** Set a new password (stored as md5) and clear a terminated state. */
 export async function resetPassword(id, newPassword) {
   ensureEnabled();
-  if (!newPassword || String(newPassword).length < 4)
-    throw HttpError.badRequest('Password must be at least 4 characters');
+  if (!newPassword) throw HttpError.badRequest('A password is required');
   if (!(await rowById(id))) throw HttpError.notFound('Account not found');
   if (useDev) {
     await CcareAccountDev.update(

@@ -196,9 +196,11 @@ const features = [
               <form v-if="step === 'password'" @submit.prevent="startLogin">
                 <div class="text-overline text-primary font-weight-bold">Customer Care</div>
                 <h2 class="cc-h1">Sign in</h2>
-                <p class="cc-lead">Enter your staff login — we'll text a one-time code to your phone.</p>
+                <p class="cc-lead">
+                  Enter your username and password — we'll text a one-time code to your phone every time.
+                </p>
 
-                <label class="cc-label">Login name</label>
+                <label class="cc-label">Username</label>
                 <v-text-field
                   v-model="name"
                   prepend-inner-icon="mdi-account-outline"
@@ -285,7 +287,7 @@ const features = [
                 <div class="text-overline text-primary font-weight-bold">New account</div>
                 <h2 class="cc-h1">Create account</h2>
                 <p class="cc-lead">Register a new CCare staff account.</p>
-                <label class="cc-label">Login name</label>
+                <label class="cc-label">Username</label>
                 <v-text-field
                   v-model="reg.name"
                   variant="solo-filled"
@@ -362,8 +364,8 @@ const features = [
               <form v-else-if="step === 'forgotName'" @submit.prevent="startForgot">
                 <div class="text-overline text-primary font-weight-bold">Reset</div>
                 <h2 class="cc-h1">Reset password</h2>
-                <p class="cc-lead">Enter your login name — we'll text a code to the phone on file.</p>
-                <label class="cc-label">Login name</label>
+                <p class="cc-lead">Enter your username — we'll text a code to the phone on file.</p>
+                <label class="cc-label">Username</label>
                 <v-text-field
                   v-model="name"
                   prepend-inner-icon="mdi-account-outline"
@@ -410,12 +412,22 @@ const features = [
                 <label class="cc-label">New password</label>
                 <v-text-field
                   v-model="resetPw"
-                  type="text"
+                  :type="showPw ? 'text' : 'password'"
+                  :maxlength="PASSWORD_MAX"
+                  prepend-inner-icon="mdi-lock-outline"
+                  :append-inner-icon="showPw ? 'mdi-eye-off-outline' : 'mdi-eye-outline'"
                   variant="solo-filled"
                   flat
                   rounded="lg"
-                  hint="At least 4 characters"
+                  hide-details
+                  autocomplete="new-password"
+                  @click:append-inner="showPw = !showPw"
                 />
+                <ul class="pw-rules">
+                  <li v-for="c in passwordChecks(resetPw)" :key="c.label" :class="{ ok: c.ok }">
+                    <v-icon :icon="c.ok ? 'mdi-check-circle' : 'mdi-circle-outline'" size="16" />{{ c.label }}
+                  </li>
+                </ul>
                 <v-btn
                   type="submit"
                   color="primary"
@@ -423,7 +435,7 @@ const features = [
                   size="x-large"
                   rounded="lg"
                   :loading="loading"
-                  :disabled="code.length < (challenge?.length ?? 6) || resetPw.length < 4"
+                  :disabled="code.length < (challenge?.length ?? 6) || !passwordOk(resetPw)"
                   class="mt-3 text-none text-black font-weight-bold"
                 >
                   Change password
@@ -725,5 +737,23 @@ const features = [
     animation: none !important;
     transition: none !important;
   }
+}
+.pw-rules {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 4px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 12px;
+  font-size: 0.8rem;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+}
+.pw-rules li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pw-rules li.ok {
+  color: rgb(var(--v-theme-success));
 }
 </style>

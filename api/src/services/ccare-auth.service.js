@@ -31,6 +31,66 @@ function maskPhone(phone) {
   return d.length <= 4 ? d : '••••••' + d.slice(-4);
 }
 
+/**
+ * May we text this number? With an SMS gateway plus OTP_TEST_NUMBERS set, only
+ * those numbers are enabled, so real staff are never texted during a test window.
+ */
+function textable(phone) {
+  const to = normalizePhone(phone);
+  const whitelist = config.otp.testNumbers;
+  return !config.sms.enabled || whitelist.length === 0 || whitelist.includes(phone) || whitelist.includes(to);
+}
+
+/** Throws a clear error when a new password could not be texted to this phone. */
+export function assertCanText(phone) {
+  if (!phone) throw HttpError.badRequest('Enter the phone number: the password is sent to it by SMS.');
+  if (!textable(phone)) {
+    throw HttpError.forbidden('SMS to this number is not enabled yet (test mode). Use one of the test numbers.');
+  }
+}
+
+/**
+ * Texts a (new) password to the account's phone and logs it (never the password
+ * itself). In development without an SMS gateway the password comes back in
+ * `devPassword` so the flow is testable; never in production.
+ */
+export async function deliverPassword({ user, password, reason, actor, ip }) {
+  assertCanText(user.staffTel);
+  const content =
+    reason === 'create'
+      ? `MyTPlus CCare: your account "${user.name}" is ready. Password: ${password} . Sign in, then confirm with the SMS code.`
+      : `MyTPlus CCare: new password for "${user.name}": ${password} . Do not share it.`;
+  let gateway = 'disabled';
+  if (config.sms.enabled) {
+    const r = await sendSms(normalizePhone(user.staffTel), content).catch((err) => ({ ok: false, error: err.message }));
+    gateway = r.ok ? 'sent' : `error:${r.status ?? r.error ?? ''}`;
+    if (!r.ok) {
+      await logCcare({
+        ccareUserId: user.id,
+        name: user.name,
+        action: 'password_sent',
+        success: false,
+        actor,
+        ip,
+        detail: { reason, phoneHint: maskPhone(user.staffTel), gateway },
+      });
+      throw new HttpError(502, 'The SMS with the password could not be sent. Use "Send new password" to try again.');
+    }
+  }
+  await logCcare({
+    ccareUserId: user.id,
+    name: user.name,
+    action: 'password_sent',
+    success: true,
+    actor,
+    ip,
+    detail: { reason, phoneHint: maskPhone(user.staffTel), gateway },
+  });
+  const out = { phoneHint: maskPhone(user.staffTel), sent: config.sms.enabled };
+  if (!config.sms.enabled && !config.isProduction) out.devPassword = password;
+  return out;
+}
+
 function store(data) {
   const id = crypto.randomBytes(24).toString('hex');
   challenges.set(id, { ...data, attempts: 0, expires: Date.now() + config.otp.ttlMs });
@@ -66,9 +126,7 @@ async function issueCode({ user, purpose, action, ip }) {
   if (!phone) throw HttpError.badRequest('No phone number on file for this account. Ask an administrator.');
 
   const to = normalizePhone(phone);
-  const whitelist = config.otp.testNumbers;
-  const whitelisted = whitelist.length === 0 || whitelist.includes(phone) || whitelist.includes(to);
-  if (config.sms.enabled && !whitelisted) {
+  if (!textable(phone)) {
     await logCcare({
       ccareUserId: user.id,
       name: user.name,

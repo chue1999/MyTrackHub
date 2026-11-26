@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { passwordRule } from '../utils/password.js';
 
 const text = (max) => z.string().trim().max(max).optional();
 
@@ -15,17 +16,26 @@ const profile = {
   staffTel: text(26),
   division: text(50),
   position: text(50),
-  brandId: text(2),
+  brandId: z.string().trim().max(3, 'Brand: at most 3 characters').optional(),
   roleCrm: text(20),
 };
 
-export const registerSchema = z.object({
-  name: z.string().trim().min(1, 'Enter a login name').max(35),
-  password: z.string().min(4, 'Password must be at least 4 characters').max(40),
-  ...profile,
-});
+const username = z.string().trim().min(1, 'Enter a username').max(35);
 
-export const createSchema = registerSchema.extend({
+export const registerSchema = z.object({ name: username, password: passwordRule, ...profile });
+
+/**
+ * An administrator creates an account: no password here — the system generates
+ * one and texts it to the phone, so the phone number is required.
+ */
+export const createSchema = z.object({
+  name: username,
+  ...profile,
+  staffTel: z
+    .string({ error: 'Enter the phone number: the password is sent to it by SMS.' })
+    .trim()
+    .min(6, 'Enter the phone number: the password is sent to it by SMS.')
+    .max(26),
   descrip: z.enum(['Admin', 'user']).optional().default('user'),
 });
 
@@ -34,14 +44,13 @@ export const updateSchema = z.object({
   descrip: z.enum(['Admin', 'user']).optional(),
 });
 
-export const resetPasswordSchema = z.object({
-  newPassword: z.string().min(4, 'Password must be at least 4 characters').max(40),
-});
+/** An administrator sends a new (generated) password by SMS: no body needed. */
+export const resetPasswordSchema = z.object({}).passthrough();
 
 export const setActiveSchema = z.object({ active: z.boolean() });
 
 // ── CCare sign-in with an SMS code ──
-const loginName = z.string().trim().min(1, 'Enter your login name').max(60);
+const loginName = z.string().trim().min(1, 'Enter your username').max(60);
 const code = z.string().trim().min(3, 'Enter the code').max(8);
 const challenge = z.string().trim().min(10).max(80);
 
@@ -51,7 +60,7 @@ export const ccareForgotSchema = z.object({ name: loginName });
 export const ccareResetSchema = z.object({
   challenge,
   code,
-  newPassword: z.string().min(4, 'Password must be at least 4 characters').max(40),
+  newPassword: passwordRule,
 });
 
 // ── Vas Service console (operations are logged; telecom wiring comes later) ──
