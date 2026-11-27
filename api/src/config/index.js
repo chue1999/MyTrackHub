@@ -114,7 +114,9 @@ const schema = z.object({
   // AI chat (website widget). A provider shows up only when its key is set.
   // Gemini has a free tier (Google AI Studio key); OpenAI and Anthropic are paid.
   GEMINI_API_KEY: z.string().default(''),
-  GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
+  GEMINI_MODEL: z.string().default('gemini-3.5-flash'),
+  // Tried in order when the main model is busy (free tier "high demand").
+  GEMINI_FALLBACK_MODELS: z.string().default('gemini-3.8-flash,gemini-flash-lite-latest'),
   OPENAI_API_KEY: z.string().default(''),
   OPENAI_MODEL: z.string().default('gpt-4o-mini'),
   ANTHROPIC_API_KEY: z.string().default(''),
@@ -214,7 +216,13 @@ export const config = Object.freeze({
   ccarePasswordMaxAgeDays: env.CCARE_PASSWORD_MAX_AGE_DAYS,
 
   ai: Object.freeze({
-    gemini: Object.freeze({ key: env.GEMINI_API_KEY, model: env.GEMINI_MODEL }),
+    gemini: Object.freeze({
+      key: env.GEMINI_API_KEY,
+      model: env.GEMINI_MODEL,
+      fallbacks: env.GEMINI_FALLBACK_MODELS.split(',')
+        .map((m) => m.trim())
+        .filter(Boolean),
+    }),
     openai: Object.freeze({ key: env.OPENAI_API_KEY, model: env.OPENAI_MODEL }),
     anthropic: Object.freeze({ key: env.ANTHROPIC_API_KEY, model: env.ANTHROPIC_MODEL }),
   }),
