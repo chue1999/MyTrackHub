@@ -259,30 +259,56 @@ const SUGGESTIONS = [
   'Write a polite SMS to a customer about a package renewal',
   'Explain eSIM to a customer in simple Lao',
 ]
+// The tiger says hello once per browser session, a moment after the page opens.
+const greet = ref(false)
+onMounted(() => {
+  let seen = '1'
+  try {
+    seen = sessionStorage.getItem('ai-chat-greeted') ?? ''
+    sessionStorage.setItem('ai-chat-greeted', '1')
+  } catch {
+    /* storage blocked: skip the greeting */
+  }
+  if (seen || open.value) return
+  setTimeout(() => (greet.value = true), 1200)
+  setTimeout(() => (greet.value = false), 7000)
+})
 const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.role === 'admin')
 </script>
 
 <template>
   <div v-if="token" class="ai-root">
     <!-- launcher -->
-    <v-btn
-      v-if="!open"
-      class="ai-fab"
-      color="primary"
-      size="x-large"
-      icon
-      elevation="8"
-      title="AI assistant"
-      @click="open = true"
-    >
-      <v-icon icon="mdi-robot-happy-outline" color="black" size="28" />
-    </v-btn>
+    <button v-if="!open" class="ai-fab" title="Tiger AI" aria-label="Open Tiger AI" @click="open = true">
+      <span class="ai-fab-hello" :class="{ show: greet }">ສະບາຍດີ! ມີຫຍັງໃຫ້ຊ່ວຍບໍ? 🐯</span>
+      <span class="ai-fab-ring" />
+      <span class="ai-fab-face"><AiTiger :size="54" mood="wave" /></span>
+    </button>
 
     <!-- panel -->
     <section v-else class="ai-panel" :class="{ wide }">
       <header class="ai-head">
-        <v-btn icon="mdi-history" variant="text" size="small" title="History" @click="showHistory = !showHistory" />
-        <div class="d-flex ga-1 flex-grow-1 flex-wrap">
+        <div class="ai-brand">
+          <span class="ai-avatar"><AiTiger :size="40" :mood="busy ? 'think' : 'idle'" /></span>
+          <div class="flex-grow-1 min-w-0">
+            <div class="ai-title">Tiger AI</div>
+            <div class="ai-status">
+              <span class="ai-dot" :class="{ busy }" />
+              {{ busy ? 'Thinking…' : currentProvider ? `${currentProvider.name} · online` : 'Assistant' }}
+            </div>
+          </div>
+          <v-btn icon="mdi-history" variant="text" size="small" title="History" @click="showHistory = !showHistory" />
+          <v-btn icon="mdi-plus" variant="text" size="small" title="New chat" @click="newChat" />
+          <v-btn
+            :icon="wide ? 'mdi-arrow-collapse' : 'mdi-arrow-expand'"
+            variant="text"
+            size="small"
+            :title="wide ? 'Smaller' : 'Bigger'"
+            @click="wide = !wide"
+          />
+          <v-btn icon="mdi-close" variant="text" size="small" title="Close" @click="open = false" />
+        </div>
+        <div v-if="providers.length > 1" class="ai-chips">
           <button
             v-for="p in providers"
             :key="p.key"
@@ -295,15 +321,6 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
             {{ p.name }}
           </button>
         </div>
-        <v-btn icon="mdi-plus" variant="text" size="small" title="New chat" @click="newChat" />
-        <v-btn
-          :icon="wide ? 'mdi-arrow-collapse' : 'mdi-arrow-expand'"
-          variant="text"
-          size="small"
-          :title="wide ? 'Smaller' : 'Bigger'"
-          @click="wide = !wide"
-        />
-        <v-btn icon="mdi-close" variant="text" size="small" title="Close" @click="open = false" />
       </header>
 
       <div class="ai-body">
@@ -327,7 +344,7 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
         <div class="ai-chat">
           <div ref="listEl" class="ai-list" @click="onListClick">
             <div v-if="!providers.length && loaded" class="ai-empty">
-              <v-icon icon="mdi-robot-off-outline" size="40" class="mb-2" />
+              <div class="ai-hero"><AiTiger :size="80" mood="think" /></div>
               <div class="font-weight-bold">No AI is set up yet</div>
               <div class="text-caption">
                 <template v-if="isAdmin">
@@ -338,8 +355,9 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
               </div>
             </div>
             <div v-else-if="!messages.length" class="ai-empty">
-              <v-icon icon="mdi-robot-happy-outline" size="40" class="mb-2" />
-              <div class="font-weight-bold">Ask {{ currentProvider?.name ?? 'the AI' }} anything</div>
+              <div class="ai-hero"><AiTiger :size="96" mood="wave" /></div>
+              <div class="ai-hero-title">ສະບາຍດີ! I'm Tiger AI</div>
+              <div class="font-weight-bold mb-1">Ask {{ currentProvider?.name ?? 'the AI' }} anything</div>
               <div class="text-caption mb-3">Lao, Hmong, Thai or English. Your chats are saved in History.</div>
               <button v-for="s in SUGGESTIONS" :key="s" class="ai-suggest" @click="input = s">{{ s }}</button>
             </div>
@@ -354,7 +372,8 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
               </div>
               <div v-else class="ai-answer">
                 <div class="ai-who" :style="{ color: ACCENT[m.provider ?? ''] }">
-                  <v-icon icon="mdi-robot-outline" size="14" />{{ providerName(m.provider) }}
+                  <AiTiger :size="22" :mood="m.streaming ? 'think' : m.error ? 'idle' : 'happy'" />
+                  {{ providerName(m.provider) }}
                   <span v-if="m.model" class="text-medium-emphasis">· {{ m.model }}</span>
                 </div>
                 <!-- eslint-disable-next-line vue/no-v-html -- sanitised with DOMPurify -->
@@ -405,9 +424,85 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
 <style scoped>
 .ai-fab {
   position: fixed;
-  right: 24px;
-  bottom: 24px;
+  right: 22px;
+  bottom: 22px;
   z-index: 2000;
+  width: 72px;
+  height: 72px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  animation: ai-float 3.2s ease-in-out infinite;
+}
+.ai-fab-face {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 25%, #fff7d6, #ffd35a 55%, #f5b301);
+  box-shadow:
+    0 10px 28px rgba(245, 160, 0, 0.45),
+    inset 0 -4px 0 rgba(0, 0, 0, 0.08);
+  transition: transform 0.2s;
+}
+.ai-fab:hover .ai-fab-face {
+  transform: scale(1.08) rotate(-4deg);
+}
+.ai-fab-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(255, 196, 0, 0.45);
+  animation: ai-ping 2.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+.ai-fab-hello {
+  position: absolute;
+  right: 84px;
+  bottom: 18px;
+  white-space: nowrap;
+  padding: 8px 14px;
+  border-radius: 16px 16px 4px 16px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #2b1a10;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+  opacity: 0;
+  transform: translateX(8px) scale(0.9);
+  transform-origin: right bottom;
+  pointer-events: none;
+  transition:
+    opacity 0.25s,
+    transform 0.25s;
+}
+.ai-fab-hello.show,
+.ai-fab:hover .ai-fab-hello {
+  opacity: 1;
+  transform: none;
+}
+@keyframes ai-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+@keyframes ai-ping {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  80%,
+  100% {
+    transform: scale(1.55);
+    opacity: 0;
+  }
 }
 .ai-panel {
   position: fixed;
@@ -418,37 +513,140 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
   height: min(680px, calc(100vh - 40px));
   display: flex;
   flex-direction: column;
-  border-radius: 20px;
+  border-radius: 22px;
   overflow: hidden;
   background: rgb(var(--v-theme-surface));
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.25);
+  animation: ai-pop 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  transform-origin: right bottom;
+}
+@keyframes ai-pop {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.92);
+  }
 }
 .ai-panel.wide {
   width: min(1040px, calc(100vw - 24px));
   height: calc(100vh - 40px);
 }
 .ai-head {
+  position: relative;
+  padding: 10px 8px 10px 12px;
+  color: #2b1a10;
+  background: linear-gradient(135deg, #ffe07a 0%, #ffc21a 55%, #f9a11b 100%);
+  overflow: hidden;
+}
+.ai-head::after {
+  /* faint tiger stripes in the header */
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    115deg,
+    transparent 0 46px,
+    rgba(43, 26, 16, 0.07) 46px 56px,
+    transparent 56px 80px
+  );
+}
+.ai-head :deep(.v-btn) {
+  color: #2b1a10;
+  position: relative;
+  z-index: 1;
+}
+.ai-brand {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 8px 8px 8px 6px;
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  gap: 8px;
+}
+.ai-avatar {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  flex: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.75);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+.ai-title {
+  font-weight: 800;
+  font-size: 1.05rem;
+  line-height: 1.2;
+}
+.ai-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  opacity: 0.8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ai-dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: #16a34a;
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.25);
+}
+.ai-dot.busy {
+  background: #e11d48;
+  box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.25);
+  animation: ai-blinkdot 0.9s infinite;
+}
+@keyframes ai-blinkdot {
+  50% {
+    opacity: 0.3;
+  }
+}
+.ai-chips {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.ai-hero {
+  display: grid;
+  place-items: center;
+  width: 124px;
+  height: 124px;
+  margin-bottom: 10px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 196, 0, 0.3), rgba(255, 196, 0, 0) 70%);
+}
+.ai-hero-title {
+  font-size: 1.15rem;
+  font-weight: 800;
+  margin-bottom: 2px;
+  color: rgb(var(--v-theme-on-surface));
 }
 .ai-chip {
   padding: 4px 12px;
   border-radius: 999px;
   font-size: 0.82rem;
   font-weight: 700;
-  border: 1px solid rgba(var(--v-theme-on-surface), 0.15);
-  color: rgba(var(--v-theme-on-surface), 0.7);
+  border: 1px solid rgba(43, 26, 16, 0.25);
+  color: #2b1a10;
+  background: rgba(255, 255, 255, 0.45);
 }
 .ai-chip.on {
   color: #fff;
   background: var(--c);
   border-color: var(--c);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
 }
 .ai-body {
+  position: relative;
   flex: 1;
   display: flex;
   min-height: 0;
@@ -463,7 +661,7 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
 }
 .ai-panel:not(.wide) .ai-history {
   position: absolute;
-  top: 53px;
+  top: 0;
   bottom: 0;
   left: 0;
   z-index: 2;
@@ -542,7 +740,15 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
   border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
 }
 .ai-suggest:hover {
-  background: rgba(var(--v-theme-on-surface), 0.04);
+  border-color: #f5b301;
+  background: rgba(255, 196, 0, 0.12);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-fab,
+  .ai-fab-ring,
+  .ai-panel {
+    animation: none;
+  }
 }
 .ai-msg.user {
   display: flex;
@@ -559,7 +765,7 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
 .ai-who {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   font-size: 0.75rem;
   font-weight: 700;
   margin-bottom: 4px;
