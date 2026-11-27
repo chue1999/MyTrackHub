@@ -200,6 +200,50 @@ const when = (iso: string) => {
     ? d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
     : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
 }
+// ── a Copy button on every code block and table inside an answer ──
+// The answer HTML is re-rendered while it streams, so buttons are (re)added
+// after each update; one click handler on the list handles them all.
+function addBlockButtons() {
+  listEl.value?.querySelectorAll<HTMLElement>('.ai-md pre, .ai-md table').forEach((el) => {
+    if (el.parentElement?.classList.contains('ai-block')) return
+    const wrap = document.createElement('div')
+    wrap.className = 'ai-block'
+    el.replaceWith(wrap)
+    wrap.appendChild(el)
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    btn.className = 'ai-block-copy'
+    btn.dataset.copy = el.tagName === 'TABLE' ? 'table' : 'code'
+    btn.textContent = el.tagName === 'TABLE' ? 'Copy table' : 'Copy code'
+    wrap.appendChild(btn)
+  })
+}
+onUpdated(addBlockButtons)
+/** Table → tab-separated text, so it pastes into Excel / Google Sheets as cells. */
+const tableText = (t: HTMLTableElement) =>
+  Array.from(t.rows)
+    .map((r) =>
+      Array.from(r.cells)
+        .map((c) => c.innerText.replace(/\s+/g, ' ').trim())
+        .join('\t'),
+    )
+    .join('\n')
+async function onListClick(e: MouseEvent) {
+  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('.ai-block-copy')
+  if (!btn) return
+  const block = btn.parentElement?.querySelector('pre, table')
+  if (!block) return
+  const text = block.tagName === 'TABLE' ? tableText(block as HTMLTableElement) : (block as HTMLElement).innerText
+  try {
+    await navigator.clipboard.writeText(text)
+    const label = btn.textContent
+    btn.textContent = '✓ Copied'
+    setTimeout(() => (btn.textContent = label), 1500)
+  } catch {
+    /* clipboard blocked */
+  }
+}
+
 const copied = ref<number | null>(null)
 async function copy(text: string, i: number) {
   try {
@@ -281,7 +325,7 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
 
         <!-- conversation -->
         <div class="ai-chat">
-          <div ref="listEl" class="ai-list">
+          <div ref="listEl" class="ai-list" @click="onListClick">
             <div v-if="!providers.length && loaded" class="ai-empty">
               <v-icon icon="mdi-robot-off-outline" size="40" class="mb-2" />
               <div class="font-weight-bold">No AI is set up yet</div>
@@ -301,7 +345,13 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
             </div>
 
             <div v-for="(m, i) in messages" :key="m.id ?? `n${i}`" class="ai-msg" :class="m.role">
-              <div v-if="m.role === 'user'" class="ai-bubble">{{ m.content }}</div>
+              <div v-if="m.role === 'user'" class="ai-user">
+                <div class="ai-bubble">{{ m.content }}</div>
+                <button class="ai-link ai-user-copy" @click="copy(m.content, i)">
+                  <v-icon :icon="copied === i ? 'mdi-check' : 'mdi-content-copy'" size="14" />
+                  {{ copied === i ? 'Copied' : 'Copy' }}
+                </button>
+              </div>
               <div v-else class="ai-answer">
                 <div class="ai-who" :style="{ color: ACCENT[m.provider ?? ''] }">
                   <v-icon icon="mdi-robot-outline" size="14" />{{ providerName(m.provider) }}
@@ -632,5 +682,51 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
   font-size: 0.7rem;
   text-align: center;
   color: rgba(var(--v-theme-on-surface), 0.5);
+}
+.ai-user {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  max-width: 85%;
+}
+.ai-user .ai-bubble {
+  max-width: 100%;
+}
+.ai-user-copy {
+  margin-top: 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.ai-user:hover .ai-user-copy {
+  opacity: 1;
+}
+/* code blocks and tables get their own Copy button (added in script) */
+.ai-md :deep(.ai-block) {
+  position: relative;
+  margin-bottom: 8px;
+  overflow-x: auto;
+}
+.ai-md :deep(.ai-block pre),
+.ai-md :deep(.ai-block table) {
+  margin-bottom: 0;
+}
+.ai-md :deep(.ai-block-copy) {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: rgba(var(--v-theme-on-surface), 0.75);
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.15);
+  opacity: 0.85;
+}
+.ai-md :deep(.ai-block-copy:hover) {
+  opacity: 1;
+}
+.ai-md :deep(.ai-block:has(table)) {
+  padding-top: 30px;
 }
 </style>
