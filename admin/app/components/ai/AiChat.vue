@@ -501,7 +501,7 @@ async function onListClick(e: MouseEvent) {
   if (btn.dataset.action === 'xlsx') return tableToExcel(block as HTMLTableElement)
   if (btn.dataset.action === 'file') return codeToFile(block)
   try {
-    await navigator.clipboard.writeText(isTable ? tableText(block as HTMLTableElement) : block.innerText)
+    await copyToClipboard(isTable ? tableText(block as HTMLTableElement) : block.innerText)
     const label = btn.textContent
     btn.textContent = '✓ Copied'
     setTimeout(() => (btn.textContent = label), 1500)
@@ -543,7 +543,7 @@ async function downloadFile(f: FileInfo) {
 const copied = ref<number | null>(null)
 async function copy(text: string, i: number) {
   try {
-    await navigator.clipboard.writeText(text)
+    await copyToClipboard(text)
     copied.value = i
     setTimeout(() => (copied.value = null), 1500)
   } catch {

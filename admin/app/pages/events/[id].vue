@@ -92,7 +92,7 @@ const view = ref<{ sent: 'table' | 'json'; received: 'table' | 'json' }>({ sent:
 const copied = ref('')
 async function copy(label: string, v: unknown) {
   try {
-    await navigator.clipboard.writeText(pretty(v))
+    await copyToClipboard(pretty(v))
     copied.value = label
     setTimeout(() => (copied.value = ''), 1500)
   } catch {

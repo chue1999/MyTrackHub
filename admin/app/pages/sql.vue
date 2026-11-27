@@ -588,7 +588,7 @@ const tsvHeader = (rs: ResultSet) => rs.columns.map((c) => c.name).join('\t')
 const copied = ref('')
 async function copyText(text: string, what = 'Copied') {
   try {
-    await navigator.clipboard.writeText(text)
+    await copyToClipboard(text)
     copied.value = what
   } catch {
     // clipboard blocked
