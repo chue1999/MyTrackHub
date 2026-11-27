@@ -82,13 +82,25 @@ async function rowById(id) {
  * account exists but is closed, so the person gets a clear message.
  */
 export async function verifyLogin(name, password) {
-  if (!ccareEnabled) return null;
+  return (await checkLogin(name, password)).user;
+}
+
+/**
+ * Like verifyLogin, but also says why it failed (for the audit log; never the
+ * password): 'unknown_user' | 'no_password' | 'wrong_password'.
+ * The stored md5 is trimmed: Tb_User_detail.Password may be a fixed-length
+ * CHAR column padded with spaces (SQL Server ignores them, JavaScript does not).
+ */
+export async function checkLogin(name, password) {
+  if (!ccareEnabled) return { user: null, reason: 'disabled' };
   const row = await rowByName(name);
-  if (!row) return null;
-  if (!isHashed(row.Password) || row.Password.toLowerCase() !== md5(password)) return null;
+  if (!row) return { user: null, reason: 'unknown_user' };
+  const stored = String(row.Password ?? '').trim().toLowerCase();
+  if (!isHashed(stored)) return { user: null, reason: 'no_password' };
+  if (stored !== md5(password)) return { user: null, reason: 'wrong_password' };
   if (!isActive(row))
     throw new HttpError(403, 'This CCare account is closed. Ask an administrator.', 'ACCOUNT_DISABLED');
-  return toPublic(row);
+  return { user: toPublic(row), reason: null };
 }
 
 /** Look up an account by login name (used by the forgot-password flow). */

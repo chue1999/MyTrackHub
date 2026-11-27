@@ -255,9 +255,9 @@ export async function startLogin({ name, password, ip }) {
       if (!USES_LOCAL || (status !== 401 && status !== 502)) throw err;
     }
   }
-  const user = await ccare.verifyLogin(name, password); // throws 403 if the account is closed
+  const { user, reason } = await ccare.checkLogin(name, password); // throws 403 if the account is closed
   if (!user) {
-    await logCcare({ name, action: 'login_fail', success: false, ip });
+    await logCcare({ name, action: 'login_fail', success: false, ip, detail: { reason, via: 'local' } });
     throw new HttpError(401, 'Wrong username or password', 'INVALID_CREDENTIALS');
   }
   const expiry = await checkExpiry(user, ip);
