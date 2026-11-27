@@ -121,6 +121,8 @@ const schema = z.object({
   GEMINI_IMAGE_MODELS: z.string().default('gemini-3.1-flash-image,gemini-2.5-flash-image'),
   // true: no "thinking", so answers start in ~2-3 s like the Gemini website.
   GEMINI_FAST: z.string().default('true').transform((v) => v !== 'false'),
+  // Outside questions may use Google Search for up-to-date answers.
+  GEMINI_SEARCH: z.string().default('true').transform((v) => v !== 'false'),
   OPENAI_API_KEY: z.string().default(''),
   OPENAI_MODEL: z.string().default('gpt-4o-mini'),
   ANTHROPIC_API_KEY: z.string().default(''),
@@ -224,6 +226,7 @@ export const config = Object.freeze({
       key: env.GEMINI_API_KEY,
       model: env.GEMINI_MODEL,
       fast: env.GEMINI_FAST,
+      search: env.GEMINI_SEARCH,
       imageModels: env.GEMINI_IMAGE_MODELS.split(',')
         .map((s) => s.trim())
         .filter(Boolean),

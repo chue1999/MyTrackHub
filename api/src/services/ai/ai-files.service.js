@@ -126,15 +126,15 @@ export function fileAsText(f) {
   return `File "${f.name}":\n\`\`\`\n${f.data.toString('utf8')}\n\`\`\``;
 }
 
-/** Saves a picture the AI made, as part of its answer. */
-export async function saveGenerated(me, { conversationId, messageId, name, mime, data }) {
+/** Saves a file made for an answer (a picture the AI made, a CSV of system data…). */
+export async function saveGenerated(me, { conversationId, messageId, name, mime, data, kind = 'image' }) {
   const f = await AiFile.create({
     ...ownerOf(me),
     conversationId,
     messageId,
     name,
     mime,
-    kind: 'image',
+    kind,
     size: data.length,
     data,
   });

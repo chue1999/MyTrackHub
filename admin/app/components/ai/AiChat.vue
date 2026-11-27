@@ -283,6 +283,7 @@ async function send(text = input.value, withFiles = true) {
         provider: provider.value,
         text: q,
         fileIds: files.map((f) => f.id),
+        scope: scope.value,
       }),
       signal: abort.signal,
     })
@@ -360,8 +361,20 @@ function retry(i: number) {
 
 // ── display ──
 const md = (s: string) => DOMPurify.sanitize(marked.parse(s || '', { async: false, breaks: true }) as string)
-const providerName = (k?: string | null) => providers.value.find((p) => p.key === k)?.name ?? k ?? ''
-const ACCENT: Record<string, string> = { gemini: '#4285f4', chatgpt: '#10a37f', claude: '#d97757' }
+const providerName = (k?: string | null) =>
+  k === 'system' ? '🔒 System data' : (providers.value.find((p) => p.key === k)?.name ?? k ?? '')
+const ACCENT: Record<string, string> = { gemini: '#4285f4', chatgpt: '#10a37f', claude: '#d97757', system: '#b45309' }
+
+// Where answers come from: auto (system data questions are detected), 🔒 only our
+// system database (the data never goes to the AI), 🌐 only outside knowledge.
+type Scope = 'auto' | 'internal' | 'external'
+const SCOPES: { key: Scope; label: string; title: string }[] = [
+  { key: 'auto', label: 'Auto', title: 'Questions about our data are answered from the system; others by the AI' },
+  { key: 'internal', label: '🔒 System', title: 'Answer only from our system database. The data is never sent to the AI.' },
+  { key: 'external', label: '🌐 Outside', title: 'Outside knowledge only (with Google Search). Phone numbers / IDs are hidden from the AI.' },
+]
+const scope = ref<Scope>((saved('scope') as Scope) || 'auto')
+watch(scope, (v) => save('scope', v))
 const currentProvider = computed(() => providers.value.find((p) => p.key === provider.value))
 const when = (iso: string) => {
   const d = new Date(iso)
@@ -668,7 +681,19 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
                 <!-- eslint-disable-next-line vue/no-v-html -- sanitised with DOMPurify -->
                 <div v-if="m.content" class="ai-md" v-html="md(m.content)" />
                 <div v-if="m.files?.length" class="ai-made">
-                  <figure v-for="f in m.files" :key="f.id" class="ai-made-img">
+                  <button
+                    v-for="f in m.files.filter((x) => x.kind !== 'image')"
+                    :key="f.id"
+                    class="ai-file ai-file--dl"
+                    :title="`Download ${f.name}`"
+                    @click="downloadFile(f)"
+                  >
+                    <v-icon :icon="/\.csv$/i.test(f.name) ? 'mdi-file-delimited-outline' : fileIcon(f.name, f.kind)" size="22" />
+                    <span class="ai-file-name">{{ f.name }}</span>
+                    <span class="ai-file-size">{{ fileSize(f.size) }}</span>
+                    <v-icon icon="mdi-download" size="16" />
+                  </button>
+                  <figure v-for="f in m.files.filter((x) => x.kind === 'image')" :key="f.id" class="ai-made-img">
                     <button :title="`Open ${f.name}`" @click="openFile(f)">
                       <img v-if="thumb(f)" :src="thumb(f)" :alt="f.name" />
                       <v-progress-circular v-else indeterminate size="22" width="2" />
@@ -683,7 +708,7 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
                     </figcaption>
                   </figure>
                 </div>
-                <div v-else-if="m.streaming" class="ai-typing">
+                <div v-if="m.streaming && !m.content" class="ai-typing">
                   <span /><span /><span />
                   <em v-if="m.status" class="ai-status-line">{{ m.status }}</em>
                 </div>
@@ -707,6 +732,20 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
             </div>
           </div>
 
+          <div class="ai-scopes" role="radiogroup" aria-label="Answer from">
+            <button
+              v-for="sc in SCOPES"
+              :key="sc.key"
+              type="button"
+              role="radio"
+              :aria-checked="scope === sc.key"
+              :class="{ on: scope === sc.key }"
+              :title="sc.title"
+              @click="scope = sc.key"
+            >
+              {{ sc.label }}
+            </button>
+          </div>
           <div v-if="pending.length" class="ai-pending">
             <div v-for="p in pending" :key="p.key" class="ai-pchip" :class="p.status" :title="p.error || p.name">
               <img v-if="p.preview" :src="p.preview" alt="" />
@@ -1318,6 +1357,42 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
 .ai-tools {
   display: flex;
   gap: 14px;
+}
+
+/* answer source: Auto / System / Outside */
+.ai-scopes {
+  display: flex;
+  gap: 4px;
+  margin: 0 12px 6px;
+}
+.ai-scopes button {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: rgba(var(--v-theme-on-surface), 0.65);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.14);
+}
+.ai-scopes button.on {
+  color: #2b1a10;
+  background: #ffd35a;
+  border-color: #f5b301;
+}
+.ai-panel.wide .ai-scopes {
+  width: min(760px, calc(100% - 24px));
+  align-self: center;
+}
+.ai-file--dl {
+  max-width: 320px;
+}
+.ai-md :deep(details) {
+  margin: 6px 0;
+  font-size: 0.82rem;
+}
+.ai-md :deep(summary) {
+  cursor: pointer;
+  font-weight: 600;
+  color: rgba(var(--v-theme-on-surface), 0.6);
 }
 
 /* attachments */

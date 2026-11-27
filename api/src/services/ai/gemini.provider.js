@@ -16,45 +16,32 @@ const filePart = (f) =>
 const noFastMode = new Set();
 
 /**
- * Gemini (Google) via the Generative Language REST API, streamed (AI Studio key).
- *
- * Fast like the Gemini website: "thinking" is switched off (GEMINI_FAST=true), so
- * the answer starts in a few seconds instead of ~10.
- *
- * Free keys are often "busy" (503) or out of quota (429). Then the next model of
- * GEMINI_MODEL + GEMINI_FALLBACK_MODELS is used at once (each model has its own
- * quota); a busy model gets one quick second try.
+ * Sends one request to Gemini, trying GEMINI_MODEL then GEMINI_FALLBACK_MODELS.
+ * Free keys are often "busy" (503) or out of quota (429): the next model is used
+ * at once (each model has its own quota); a busy model gets one quick second try.
+ * `build({ model, fast, search })` makes the request body; a 400 first drops
+ * Google Search, then the "no thinking" setting, and asks again.
+ * Returns { res, model } with an ok response.
  */
-export async function streamGemini({ system, messages, onText, onStatus = () => {}, signal }) {
+async function requestGemini({ action, build, search = false, signal, onStatus = () => {} }) {
   const { key, model, fallbacks, fast } = config.ai.gemini;
   const models = [...new Set([model, ...fallbacks])];
-  const request = {
-    systemInstruction: { parts: [{ text: system }] },
-    contents: messages.map((m) => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [...(m.files ?? []).map(filePart), { text: m.content }],
-    })),
-  };
-  const bodyFor = (m) =>
-    JSON.stringify(
-      fast && !noFastMode.has(m) ? { ...request, generationConfig: { thinkingConfig: { thinkingBudget: 0 } } } : request,
-    );
-
   let lastError = null;
   for (const [i, m] of models.entries()) {
     if (i > 0) onStatus(`${models[i - 1]} is busy — using ${m}…`);
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:streamGenerateContent?alt=sse`;
-
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:${action}`;
+    let useSearch = search;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
       if (signal?.aborted) throw new Error('Stopped');
       const ctl = new AbortController();
       const timer = setTimeout(() => ctl.abort(), FIRST_BYTE_TIMEOUT_MS);
+      const useFast = fast && !noFastMode.has(m);
       let res = null;
       try {
         res = await fetch(url, {
           method: 'POST',
           headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
-          body: bodyFor(m),
+          body: JSON.stringify(build({ model: m, fast: useFast, search: useSearch })),
           signal: signal ? AbortSignal.any([ctl.signal, signal]) : ctl.signal,
         });
       } catch (err) {
@@ -65,25 +52,19 @@ export async function streamGemini({ system, messages, onText, onStatus = () => 
       } finally {
         clearTimeout(timer); // headers arrived (or failed): the stream itself may take as long as it needs
       }
-
-      if (res?.ok) {
-        let usage = null;
-        await readSse(res, (j) => {
-          for (const part of j.candidates?.[0]?.content?.parts ?? []) if (part.text && !part.thought) onText(part.text);
-          if (j.usageMetadata) usage = j.usageMetadata;
-        });
-        return { model: m, tokensIn: usage?.promptTokenCount ?? null, tokensOut: usage?.candidatesTokenCount ?? null };
-      }
+      if (res?.ok) return { res, model: m };
 
       if (res) {
         lastError = await providerError(`Gemini (${m})`, res);
-        // This model does not take the "no thinking" setting: ask it again without.
-        if (res.status === 400 && fast && !noFastMode.has(m)) {
+        if (res.status === 400 && useSearch) {
+          useSearch = false; // this model / key cannot search: answer without
+          continue;
+        }
+        if (res.status === 400 && useFast) {
           noFastMode.add(m);
           continue;
         }
         if (res.status === 401 || res.status === 403) throw lastError; // bad key: no model will work
-        // Busy: one quick second try; out of quota / not found / other: next model.
         if (res.status === 503 && attempt === 0) {
           logger.info({ model: m }, 'Gemini busy, trying once more');
           await new Promise((r) => setTimeout(r, 800));
@@ -99,4 +80,59 @@ export async function streamGemini({ system, messages, onText, onStatus = () => 
       'Gemini: the free quota is used up for now (too many questions per minute or per day). Wait a minute and try again, or ask an administrator to turn on billing for the Gemini key.';
   }
   throw lastError ?? new Error('Gemini: no model available right now. Please try again.');
+}
+
+const thinking = (fast) => (fast ? { thinkingConfig: { thinkingBudget: 0 } } : {});
+
+/**
+ * Gemini (Google) chat, streamed. Fast like the Gemini website: "thinking" is off
+ * (GEMINI_FAST=true). With `search`, Gemini may look things up on Google Search.
+ */
+export async function streamGemini({ system, messages, onText, onStatus, signal, search = false }) {
+  const contents = messages.map((m) => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [...(m.files ?? []).map(filePart), { text: m.content }],
+  }));
+  const { res, model } = await requestGemini({
+    action: 'streamGenerateContent?alt=sse',
+    search,
+    signal,
+    onStatus,
+    build: ({ fast, search: s }) => ({
+      systemInstruction: { parts: [{ text: system }] },
+      contents,
+      ...(s ? { tools: [{ google_search: {} }] } : {}),
+      ...(fast ? { generationConfig: thinking(fast) } : {}),
+    }),
+  });
+  let usage = null;
+  await readSse(res, (j) => {
+    for (const part of j.candidates?.[0]?.content?.parts ?? []) if (part.text && !part.thought) onText(part.text);
+    if (j.usageMetadata) usage = j.usageMetadata;
+  });
+  return { model, tokensIn: usage?.promptTokenCount ?? null, tokensOut: usage?.candidatesTokenCount ?? null };
+}
+
+/** One JSON answer from Gemini (used to plan system-data questions). */
+export async function geminiJson({ system, prompt, signal, onStatus }) {
+  const { res, model } = await requestGemini({
+    action: 'generateContent',
+    signal,
+    onStatus,
+    build: ({ fast }) => ({
+      systemInstruction: { parts: [{ text: system }] },
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { responseMimeType: 'application/json', temperature: 0, ...thinking(fast) },
+    }),
+  });
+  const j = await res.json();
+  const text = (j.candidates?.[0]?.content?.parts ?? [])
+    .filter((p) => p.text && !p.thought)
+    .map((p) => p.text)
+    .join('');
+  try {
+    return { model, data: JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, '')) };
+  } catch {
+    throw new Error('Gemini: could not understand the plan for this question. Please ask it another way.');
+  }
 }
