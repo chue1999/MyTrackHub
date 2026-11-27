@@ -15,6 +15,63 @@ const filePart = (f) =>
 // Models that rejected the "no thinking" setting (400): asked without it from then on.
 const noFastMode = new Set();
 
+/** Next midnight in California (Pacific time): when Google resets the free daily quota. */
+function nextPacificMidnight(now = new Date()) {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Los_Angeles',
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: 'numeric',
+      second: 'numeric',
+    })
+      .formatToParts(now)
+      .map((x) => [x.type, Number(x.value)]),
+  );
+  const offset = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - now.getTime();
+  return new Date(Date.UTC(p.year, p.month - 1, p.day + 1) - offset);
+}
+
+/**
+ * When a model whose quota is used up can be asked again: per-day limits reset at
+ * midnight Pacific time; per-minute limits after Google's RetryInfo delay.
+ */
+function quotaResetAt(err, now = new Date()) {
+  const d = err?.details ?? [];
+  const daily = d.some((x) => (x.violations ?? []).some((v) => /PerDay/i.test(v.quotaId ?? '')));
+  if (daily) return { at: nextPacificMidnight(now), daily: true };
+  const delay = d.find((x) => x.retryDelay)?.retryDelay;
+  const secs = delay ? parseFloat(delay) : 60;
+  return { at: new Date(now.getTime() + Math.ceil(secs) * 1000), daily: false };
+}
+
+const laosTime = (date) =>
+  date.toLocaleString('en-GB', { timeZone: 'Asia/Vientiane', hour: '2-digit', minute: '2-digit', hour12: false });
+const waitText = (ms) => {
+  const min = Math.max(1, Math.round(ms / 60_000));
+  return min < 60 ? `${min} min` : `${Math.floor(min / 60)} h ${min % 60} min`;
+};
+
+/** The "quota used up" message, with when it can be used again (Laos time). */
+function quotaError(resets) {
+  const soonest = resets.sort((a, b) => a.at - b.at)[0];
+  const err = new Error('Gemini: the free quota is used up.');
+  err.status = 429;
+  if (!soonest) return err;
+  const wait = soonest.at.getTime() - Date.now();
+  const when = laosTime(soonest.at);
+  err.retryAt = soonest.at.toISOString();
+  err.message = soonest.daily
+    ? `Gemini: today's free quota is used up. It works again at about ${when} (Laos time), in ${waitText(wait)}. ` +
+      `ໃຊ້ໄດ້ອີກປະມານ ${when} ໂມງ. To avoid waiting, turn on billing for the Gemini key (aistudio.google.com).`
+    : `Gemini: too many questions this minute. Try again at ${when} (in ${waitText(wait)}). ` +
+      `ລອງໃໝ່ເວລາ ${when} ໂມງ.`;
+  return err;
+}
+
 /**
  * Sends one request to Gemini, trying GEMINI_MODEL then GEMINI_FALLBACK_MODELS.
  * Free keys are often "busy" (503) or out of quota (429): the next model is used
@@ -27,6 +84,7 @@ async function requestGemini({ action, build, search = false, signal, onStatus =
   const { key, model, fallbacks, fast } = config.ai.gemini;
   const models = [...new Set([model, ...fallbacks])];
   let lastError = null;
+  const resets = []; // when each out-of-quota model can be used again
   for (const [i, m] of models.entries()) {
     if (i > 0) onStatus(`${models[i - 1]} is busy — using ${m}…`);
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:${action}`;
@@ -65,6 +123,7 @@ async function requestGemini({ action, build, search = false, signal, onStatus =
           continue;
         }
         if (res.status === 401 || res.status === 403) throw lastError; // bad key: no model will work
+        if (res.status === 429) resets.push(quotaResetAt(lastError));
         if (res.status === 503 && attempt === 0) {
           logger.info({ model: m }, 'Gemini busy, trying once more');
           await new Promise((r) => setTimeout(r, 800));
@@ -75,10 +134,8 @@ async function requestGemini({ action, build, search = false, signal, onStatus =
       break;
     }
   }
-  if (lastError?.status === 429) {
-    lastError.message =
-      'Gemini: the free quota is used up for now (too many questions per minute or per day). Wait a minute and try again, or ask an administrator to turn on billing for the Gemini key.';
-  }
+  // Every model was out of quota: say when the first one works again.
+  if (lastError?.status === 429 || (resets.length && resets.length === models.length)) throw quotaError(resets);
   throw lastError ?? new Error('Gemini: no model available right now. Please try again.');
 }
 

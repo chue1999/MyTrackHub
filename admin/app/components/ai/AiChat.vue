@@ -46,6 +46,7 @@ interface Msg {
   error?: string | null
   streaming?: boolean
   status?: string
+  retryAt?: string
   createdAt?: string
 }
 
@@ -306,6 +307,7 @@ async function send(text = input.value, withFiles = true) {
           type: string
           text?: string
           message?: string
+          retryAt?: string
           conversationId?: number
           model?: string
           file?: FileInfo
@@ -331,6 +333,7 @@ async function send(text = input.value, withFiles = true) {
           answer.model = ev.model
         } else if (ev.type === 'error') {
           answer.error = ev.message
+          answer.retryAt = ev.retryAt
         }
       }
     }
@@ -357,6 +360,28 @@ function retry(i: number) {
   const q = [...messages.value.slice(0, i)].reverse().find((m) => m.role === 'user')
   // The files are already in the conversation, so only the text is asked again.
   if (q) send(q.content || 'Please look at the attached file(s) again.', false)
+}
+
+// Out of AI quota: count down to when it works again (ticks only while waiting).
+const now = ref(Date.now())
+let ticker: ReturnType<typeof setInterval> | null = null
+watchEffect(() => {
+  const waiting = messages.value.some((m) => m.retryAt && new Date(m.retryAt).getTime() > Date.now())
+  if (waiting && !ticker) ticker = setInterval(() => (now.value = Date.now()), 1000)
+  if (!waiting && ticker) {
+    clearInterval(ticker)
+    ticker = null
+  }
+})
+onBeforeUnmount(() => ticker && clearInterval(ticker))
+function waitLeft(m: Msg) {
+  if (!m.retryAt) return ''
+  const s = Math.ceil((new Date(m.retryAt).getTime() - now.value) / 1000)
+  if (s <= 0) return ''
+  const h = Math.floor(s / 3600)
+  const mm = Math.floor((s % 3600) / 60)
+  const ss = s % 60
+  return `Works again in ${h ? `${h}:${String(mm).padStart(2, '0')}` : mm}:${String(ss).padStart(2, '0')}`
 }
 
 // ── display ──
@@ -714,7 +739,10 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
                 </div>
                 <div v-if="m.error" class="ai-error">
                   <v-icon icon="mdi-alert-circle-outline" size="16" />{{ m.error }}
-                  <button class="ai-link" @click="retry(i)">Try again</button>
+                  <span v-if="waitLeft(m)" class="ai-wait">
+                    <v-icon icon="mdi-timer-sand" size="14" />{{ waitLeft(m) }}
+                  </span>
+                  <button v-else class="ai-link" @click="retry(i)">Try again</button>
                 </div>
                 <div v-if="m.content && !m.streaming" class="ai-tools">
                   <button class="ai-link" @click="copy(m.content, i)">
@@ -1393,6 +1421,17 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
   cursor: pointer;
   font-weight: 600;
   color: rgba(var(--v-theme-on-surface), 0.6);
+}
+
+.ai-wait {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: rgba(var(--v-theme-error), 0.12);
 }
 
 /* attachments */

@@ -29,13 +29,16 @@ export async function readSse(response, onData) {
 /** A provider HTTP error with the provider's own message (shown to the user). */
 export async function providerError(name, response) {
   let detail = '';
+  let details = [];
   try {
     const j = await response.json();
     detail = j?.error?.message || j?.message || JSON.stringify(j).slice(0, 300);
+    details = Array.isArray(j?.error?.details) ? j.error.details : [];
   } catch {
     detail = await response.text().catch(() => '');
   }
   const err = new Error(`${name}: ${response.status} ${String(detail).slice(0, 300)}`);
   err.status = response.status;
+  err.details = details; // e.g. Google's RetryInfo / QuotaFailure (when the quota is used up)
   return err;
 }

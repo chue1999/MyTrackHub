@@ -203,7 +203,7 @@ export async function ask(me, { conversationId, provider, text, fileIds = [], mo
       error: String(err.message).slice(0, 500),
     });
     await conv.update({ updatedAt: new Date() });
-    send({ type: 'error', message: String(err.message).slice(0, 300) });
+    send({ type: 'error', message: String(err.message).slice(0, 500), retryAt: err.retryAt });
   }
   res.end();
 }
@@ -266,7 +266,7 @@ async function answerWithImage({ me, conv, question, provider, earlier, send, si
       error: String(err.message).slice(0, 500),
     });
     await conv.update({ updatedAt: new Date() });
-    send({ type: 'error', message: String(err.message).slice(0, 300) });
+    send({ type: 'error', message: String(err.message).slice(0, 500), retryAt: err.retryAt });
   }
 }
 
@@ -338,11 +338,11 @@ async function answerFromSystem({ me, conv, question, context, masker, force, se
   } catch (err) {
     if (signal.aborted) return true;
     logger.warn({ err: err.message }, 'AI system data question failed');
-    const message = `🔒 Could not answer from the system data: ${masker.unmask(String(err.message)).slice(0, 300)}`;
+    const message = `🔒 Could not answer from the system data: ${masker.unmask(String(err.message)).slice(0, 400)}`;
     await question.update({ provider: 'system' });
     await AiMessage.create({ conversationId: conv.id, role: 'assistant', content: '', provider: 'system', error: message });
     await conv.update({ updatedAt: new Date() });
-    send({ type: 'error', message });
+    send({ type: 'error', message, retryAt: err.retryAt });
     return true;
   }
 }
