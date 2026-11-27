@@ -74,7 +74,7 @@ router.use(authenticate);
 // never the MyTPlus data endpoints — even by calling the API directly.
 router.use((req, _res, next) => {
   if (req.me.kind !== 'ccare') return next();
-  if (/^\/(ccare|auth|stream|ai)\b/.test(req.path)) return next();
+  if (/^\/(ccare|auth|stream)\b/.test(req.path)) return next(); // no AI chat for CCare
   next(HttpError.forbidden('CCare accounts can only use the CCare page'));
 });
 

@@ -86,6 +86,8 @@ onMounted(() => {
   wide.value = saved('wide') === '1'
   if (open.value) init()
 })
+// The signed-in account loads after the page: start the chat once it is known.
+watch(admin, () => open.value && init())
 watch(open, (v) => {
   save('open', v ? '1' : '0')
   if (v) init()
@@ -94,7 +96,7 @@ watch(wide, (v) => save('wide', v ? '1' : '0'))
 watch(provider, (v) => v && save('provider', v))
 
 async function init() {
-  if (loaded.value) return
+  if (loaded.value || !admin.value || admin.value.kind === 'ccare') return // no AI chat for CCare accounts
   loaded.value = true
   try {
     providers.value = await api<Provider[]>('/ai/providers')
@@ -521,7 +523,7 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
 </script>
 
 <template>
-  <div v-if="token" class="ai-root">
+  <div v-if="token && admin && admin.kind !== 'ccare'" class="ai-root">
     <!-- launcher -->
     <button v-if="!open" class="ai-fab" title="Tiger AI" aria-label="Open Tiger AI" @click="open = true">
       <span class="ai-fab-hello" :class="{ show: greet }">ສະບາຍດີ! ມີຫຍັງໃຫ້ຊ່ວຍບໍ? 🐯</span>
