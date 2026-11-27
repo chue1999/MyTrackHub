@@ -4,11 +4,22 @@ import { BRANDING_DEFAULTS as BRANDING_DEFAULTS_ } from '~/composables/useBrandi
 interface Retention {
   enabled: boolean
   months: number
+  days?: number | null
   monthOptions: number[]
+  dayOptions?: number[]
   updatedAt?: string
   updatedBy?: string
-  lastRun: { at: string; deleted: number; cutoff: string; months: number; by: string; ms: number } | null
-  preview: { months: number; cutoff: string; willDelete: number }
+  lastRun: {
+    at: string
+    deleted: number
+    cutoff: string
+    months: number | null
+    days?: number | null
+    period?: string
+    by: string
+    ms: number
+  } | null
+  preview: { months: number | null; days?: number | null; cutoff: string; willDelete: number }
   total: number
   oldest: string | null
 }
@@ -18,7 +29,10 @@ const { admin: me } = useAuth()
 const canEdit = computed(() => me.value?.role === 'admin')
 
 const info = ref<Retention | null>(null)
-const form = reactive({ enabled: true, months: 4 })
+// The period as one value: 'd7' = 7 days, 'm3' = 3 months.
+const form = reactive({ enabled: true, period: 'm4' })
+const periodOf = (r: { days?: number | null; months?: number | null }) => (r.days ? `d${r.days}` : `m${r.months}`)
+const periodBody = (p: string) => (p.startsWith('d') ? { days: Number(p.slice(1)) } : { months: Number(p.slice(1)) })
 const loading = ref(true)
 const saving = ref(false)
 const running = ref(false)
@@ -29,7 +43,7 @@ const snack = reactive({ show: false, text: '', color: 'success' })
 function apply(r: Retention) {
   info.value = r
   form.enabled = r.enabled
-  form.months = r.months
+  form.period = periodOf(r)
 }
 
 async function load() {
@@ -48,12 +62,12 @@ onMounted(load)
 // Live count of what the selected period would delete.
 const preview = ref<Retention['preview'] | null>(null)
 watch(
-  () => form.months,
-  async (m) => {
+  () => form.period,
+  async (p) => {
     if (!info.value) return
-    if (m === info.value.preview.months) return (preview.value = info.value.preview)
+    if (p === periodOf(info.value.preview)) return (preview.value = info.value.preview)
     try {
-      preview.value = (await api<Retention>('/settings/retention', { query: { months: m } })).preview
+      preview.value = (await api<Retention>('/settings/retention', { query: periodBody(p) })).preview
     } catch {
       preview.value = null
     }
@@ -61,17 +75,16 @@ watch(
 )
 const shown = computed(() => preview.value ?? info.value?.preview ?? null)
 const changed = computed(
-  () => !!info.value && (form.enabled !== info.value.enabled || form.months !== info.value.months),
+  () => !!info.value && (form.enabled !== info.value.enabled || form.period !== periodOf(info.value)),
 )
-const MONTH_ITEMS = computed(() =>
-  (info.value?.monthOptions ?? [1, 2, 3, 4, 6, 12]).map((m) => ({
-    value: m,
+const MONTH_ITEMS = computed(() => [
+  ...(info.value?.dayOptions ?? [1, 5, 7, 14]).map((d) => ({ value: `d${d}`, title: `${d} day${d > 1 ? 's' : ''}` })),
+  ...(info.value?.monthOptions ?? [1, 2, 3, 4, 6, 12]).map((m) => ({
+    value: `m${m}`,
     title: m % 12 === 0 ? `${m / 12} year${m > 12 ? 's' : ''} (${m} months)` : `${m} month${m > 1 ? 's' : ''}`,
   })),
-)
-const keepText = computed(
-  () => MONTH_ITEMS.value.find((i) => i.value === form.months)?.title ?? `${form.months} months`,
-)
+])
+const keepText = computed(() => MONTH_ITEMS.value.find((i) => i.value === form.period)?.title ?? form.period)
 
 function askSave() {
   // Turning it on (or shortening the period) deletes logs right away, so confirm first.
@@ -87,7 +100,7 @@ async function save() {
     apply(
       await api<Retention>('/settings/retention', {
         method: 'PUT',
-        body: { enabled: form.enabled, months: form.months },
+        body: { enabled: form.enabled, ...periodBody(form.period) },
       }),
     )
     preview.value = null
@@ -428,7 +441,7 @@ onMounted(loadBranding)
           <v-col cols="12" md="5">
             <div class="label">Keep logs for</div>
             <v-select
-              v-model="form.months"
+              v-model="form.period"
               :items="MONTH_ITEMS"
               :disabled="!canEdit || loading || !form.enabled"
               prepend-inner-icon="mdi-calendar-range"
@@ -464,7 +477,7 @@ onMounted(loadBranding)
           <span v-if="info?.lastRun">
             Last clean-up {{ timeAgo(info.lastRun.at) }} ({{ formatDateTime(info.lastRun.at) }}):
             <strong>{{ info.lastRun.deleted.toLocaleString() }}</strong> logs deleted, older than
-            {{ info.lastRun.months }} months
+            {{ info.lastRun.period ?? `${info.lastRun.months} months` }}
             <span class="text-medium-emphasis">· by {{ info.lastRun.by }}</span>
             <span v-if="info?.updatedBy" class="text-medium-emphasis">
               · setting changed by {{ info.updatedBy }} {{ timeAgo(info.updatedAt) }}</span

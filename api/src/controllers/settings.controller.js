@@ -1,9 +1,10 @@
 import * as brandingService from '../services/branding.service.js';
 import * as retentionService from '../services/retention.service.js';
 
-/** GET /settings/retention?months= (months previews another period) */
+/** GET /settings/retention?days=|months= (previews another period) */
 export async function getRetention(req, res) {
-  res.json(await retentionService.getRetentionInfo({ previewMonths: req.validatedQuery.months }));
+  const { days, months } = req.validatedQuery;
+  res.json(await retentionService.getRetentionInfo({ preview: days || months ? { days, months } : undefined }));
 }
 
 /** PUT /settings/retention */

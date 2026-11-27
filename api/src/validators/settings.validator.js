@@ -1,16 +1,30 @@
 import { z } from 'zod';
 import { LOGO_MAX_CHARS, LOGO_PATTERN } from '../services/branding.service.js';
-import { RETENTION_MONTHS } from '../services/retention.service.js';
+import { RETENTION_DAYS, RETENTION_MONTHS } from '../services/retention.service.js';
 
-export const retentionSchema = z.object({
-  enabled: z.boolean(),
-  months: z
-    .number()
-    .int()
-    .refine((m) => RETENTION_MONTHS.includes(m), 'Choose one of the listed periods'),
-});
+// The period: `days` (1, 5, 7, 14) or `months` (1 … 36).
+export const retentionSchema = z
+  .object({
+    enabled: z.boolean(),
+    days: z
+      .number()
+      .int()
+      .refine((d) => RETENTION_DAYS.includes(d), 'Choose one of the listed periods')
+      .nullish(),
+    months: z
+      .number()
+      .int()
+      .refine((m) => RETENTION_MONTHS.includes(m), 'Choose one of the listed periods')
+      .nullish(),
+  })
+  .refine((b) => b.days || b.months, { message: 'Choose a period', path: ['months'] });
 
 export const retentionPreviewQuery = z.object({
+  days: z.coerce
+    .number()
+    .int()
+    .optional()
+    .transform((d) => (RETENTION_DAYS.includes(d) ? d : undefined)),
   months: z.coerce
     .number()
     .int()

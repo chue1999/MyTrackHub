@@ -11,9 +11,15 @@ import { logger } from '../utils/logger.js';
 
 const SETTING_KEY = 'logRetention';
 const DELETE_BATCH_SIZE = 5000;
-const DEFAULTS = Object.freeze({ enabled: true, months: 4, lastRun: null });
+// A period is either `days` (short) or `months`; `days` wins when set.
+const DEFAULTS = Object.freeze({ enabled: true, months: 4, days: null, lastRun: null });
 
+export const RETENTION_DAYS = Object.freeze([1, 5, 7, 14]);
 export const RETENTION_MONTHS = Object.freeze([1, 2, 3, 4, 6, 9, 12, 18, 24, 36]);
+
+/** "7 days" / "3 months" */
+export const periodText = ({ days, months }) =>
+  days ? `${days} day${days === 1 ? '' : 's'}` : `${months} month${months === 1 ? '' : 's'}`;
 
 /** @type {Promise<{skipped: boolean, settings: object}> | null} */
 let runningCleanup = null;
@@ -29,8 +35,12 @@ async function saveRetention(patch) {
   return next;
 }
 
-/** Start of the day N months ago: everything before it is deleted. */
-export function cutoffFor(months, now = new Date()) {
+/**
+ * Everything before this is deleted: N days ago (to the minute) for a days
+ * period, or the start of the day N months ago.
+ */
+export function cutoffFor({ days, months }, now = new Date()) {
+  if (days) return new Date(now.getTime() - days * 86_400_000);
   const d = new Date(now);
   d.setHours(0, 0, 0, 0);
   d.setMonth(d.getMonth() - months);
@@ -64,26 +74,28 @@ export function runCleanup({ force = false, by = 'auto' } = {}) {
   runningCleanup = (async () => {
     const settings = await getRetention();
     if (!settings.enabled && !force) return { skipped: true, settings };
-    const cutoff = cutoffFor(settings.months);
+    const cutoff = cutoffFor(settings);
     const startedAt = Date.now();
     const deleted = await deleteOlderThan(cutoff);
     const lastRun = {
       at: new Date().toISOString(),
       deleted,
       cutoff: cutoff.toISOString(),
-      months: settings.months,
+      months: settings.days ? null : settings.months,
+      days: settings.days ?? null,
+      period: periodText(settings),
       by,
       ms: Date.now() - startedAt,
     };
     if (deleted) {
-      logger.info({ deleted, months: settings.months, cutoff }, 'Retention: deleted old events');
+      logger.info({ deleted, period: periodText(settings), cutoff }, 'Retention: deleted old events');
       // Recorded in the audit log: who (or 'auto') deleted how many app events.
       await logCcare({
         name: by,
         action: 'events_purged',
         success: true,
         actor: by,
-        detail: { deletedBy: by, deleted, olderThan: cutoff.toISOString(), months: settings.months },
+        detail: { deletedBy: by, deleted, olderThan: cutoff.toISOString(), period: periodText(settings) },
       });
     }
     return { skipped: false, settings: await saveRetention({ lastRun }) };
@@ -94,10 +106,10 @@ export function runCleanup({ force = false, by = 'auto' } = {}) {
 }
 
 /** Settings plus live numbers for the Settings page (optionally previewing another period). */
-export async function getRetentionInfo({ settings, previewMonths } = {}) {
+export async function getRetentionInfo({ settings, preview: ask } = {}) {
   const current = settings ?? (await getRetention());
-  const months = previewMonths ?? current.months;
-  const cutoff = cutoffFor(months);
+  const period = ask?.days || ask?.months ? ask : { days: current.days, months: current.months };
+  const cutoff = cutoffFor(period);
   const [total, oldest, willDelete] = await Promise.all([
     Event.count(),
     Event.min('occurredAt'),
@@ -106,15 +118,22 @@ export async function getRetentionInfo({ settings, previewMonths } = {}) {
   return {
     ...current,
     monthOptions: RETENTION_MONTHS,
-    preview: { months, cutoff, willDelete },
+    dayOptions: RETENTION_DAYS,
+    preview: { months: period.days ? null : period.months, days: period.days ?? null, cutoff, willDelete },
     total,
     oldest: oldest ?? null,
   };
 }
 
 /** Saves the setting and, when enabled, applies it straight away. */
-export async function updateRetention({ enabled, months }, by) {
-  const saved = await saveRetention({ enabled, months, updatedAt: new Date().toISOString(), updatedBy: by });
+export async function updateRetention({ enabled, months, days }, by) {
+  const saved = await saveRetention({
+    enabled,
+    days: days ?? null,
+    months: days ? ((await getRetention()).months ?? DEFAULTS.months) : months,
+    updatedAt: new Date().toISOString(),
+    updatedBy: by,
+  });
   const run = enabled ? await runCleanup({ by }) : null;
   return getRetentionInfo({ settings: run?.settings ?? saved });
 }
