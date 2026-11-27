@@ -39,3 +39,31 @@ export const AiMessage = sequelize.define(
   },
   { tableName: 'ai_messages', underscored: true, timestamps: false, indexes: [{ fields: ['conversation_id'] }] },
 );
+
+/**
+ * A file or picture attached to a question. The bytes are kept in the database
+ * (so the history and every provider can use it again); Word / Excel files are
+ * turned into text in the browser before upload, so `kind` is image, pdf or text.
+ */
+export const AiFile = sequelize.define(
+  'AiFile',
+  {
+    id: { type: DataTypes.BIGINT, autoIncrement: true, primaryKey: true },
+    ownerKind: { type: DataTypes.STRING(10), allowNull: false },
+    ownerId: { type: DataTypes.INTEGER, allowNull: false },
+    conversationId: { type: DataTypes.BIGINT },
+    messageId: { type: DataTypes.BIGINT }, // null until the question is sent
+    name: { type: DataTypes.STRING(200), allowNull: false },
+    mime: { type: DataTypes.STRING(100), allowNull: false },
+    kind: { type: DataTypes.STRING(10), allowNull: false }, // 'image' | 'pdf' | 'text'
+    size: { type: DataTypes.INTEGER, allowNull: false },
+    data: { type: DataTypes.BLOB('long'), allowNull: false },
+    createdAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+  },
+  {
+    tableName: 'ai_files',
+    underscored: true,
+    timestamps: false,
+    indexes: [{ fields: ['message_id'] }, { fields: ['owner_kind', 'owner_id', 'created_at'] }],
+  },
+);

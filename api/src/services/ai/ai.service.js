@@ -2,6 +2,7 @@ import { config } from '../../config/index.js';
 import { AiConversation, AiMessage } from '../../models/index.js';
 import { HttpError } from '../../utils/http-error.js';
 import { logger } from '../../utils/logger.js';
+import * as files from './ai-files.service.js';
 import { streamClaude } from './anthropic.provider.js';
 import { streamGemini } from './gemini.provider.js';
 import { streamOpenAi } from './openai.provider.js';
@@ -48,7 +49,9 @@ async function own(me, id) {
 
 export async function getConversation(me, id) {
   const conv = await own(me, id);
-  const messages = await AiMessage.findAll({ where: { conversationId: conv.id }, order: [['id', 'ASC']] });
+  const rows = await AiMessage.findAll({ where: { conversationId: conv.id }, order: [['id', 'ASC']] });
+  const attached = await files.infoByMessage(rows.filter((m) => m.role === 'user').map((m) => Number(m.id)));
+  const messages = rows.map((m) => ({ ...m.toJSON(), files: attached.get(Number(m.id)) ?? [] }));
   return { conversation: conv, messages };
 }
 
@@ -65,7 +68,7 @@ export async function rename(me, id, title) {
  *   data: {"type":"done","messageId":2}        or {"type":"error","message":"…"}
  * The question and the answer are both stored (the history).
  */
-export async function ask(me, { conversationId, provider, text }, res) {
+export async function ask(me, { conversationId, provider, text, fileIds = [] }, res) {
   const p = PROVIDERS[provider];
   if (!p || !p.cfg().key) throw HttpError.badRequest(`${p?.name ?? provider} is not set up (no API key).`);
 
@@ -74,9 +77,10 @@ export async function ask(me, { conversationId, provider, text }, res) {
     : await AiConversation.create({
         ...ownerOf(me),
         ownerName: me.username,
-        title: text.replace(/\s+/g, ' ').slice(0, 80),
+        title: (text || 'File').replace(/\s+/g, ' ').slice(0, 80),
       });
-  await AiMessage.create({ conversationId: conv.id, role: 'user', content: text, provider });
+  const question = await AiMessage.create({ conversationId: conv.id, role: 'user', content: text, provider });
+  await files.attach(me, fileIds, { conversationId: conv.id, messageId: question.id });
 
   const earlier = await AiMessage.findAll({
     where: { conversationId: conv.id },
@@ -84,10 +88,18 @@ export async function ask(me, { conversationId, provider, text }, res) {
     limit: HISTORY,
   });
   // Oldest first; skip failed answers; the model needs user/assistant turns in order.
+  // Questions carry their attached files (pictures, PDFs, text).
+  const fileData = await files.dataByMessage(earlier.filter((m) => m.role === 'user').map((m) => Number(m.id)));
   const messages = earlier
     .reverse()
-    .filter((m) => m.content && !m.error)
-    .map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }));
+    .map((m) => ({
+      role: m.role === 'assistant' ? 'assistant' : 'user',
+      content: m.content || (m.role === 'user' ? 'Please look at the attached file(s).' : ''),
+      files: fileData.get(Number(m.id)) ?? [],
+      ok: !m.error && (m.content || fileData.has(Number(m.id))),
+    }))
+    .filter((m) => m.ok)
+    .map(({ ok: _ok, ...m }) => m);
   while (messages.length && messages[0].role !== 'user') messages.shift();
 
   res.writeHead(200, {

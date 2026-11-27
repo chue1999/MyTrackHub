@@ -1,5 +1,6 @@
 import { config } from '../../config/index.js';
 import { logger } from '../../utils/logger.js';
+import { fileAsText } from './ai-files.service.js';
 import { providerError, readSse } from './sse.js';
 
 // Waiting for Google to START answering; the streamed answer itself has no limit.
@@ -13,6 +14,12 @@ const RETRY_STATUS = [429, 500, 503];
  * (503): each model is tried twice, then the next one in GEMINI_MODEL +
  * GEMINI_FALLBACK_MODELS is used.
  */
+// Pictures and PDFs go inline (base64); text files as text.
+const filePart = (f) =>
+  f.data && f.kind !== 'text'
+    ? { inline_data: { mime_type: f.mime, data: f.data.toString('base64') } }
+    : { text: fileAsText(f) };
+
 export async function streamGemini({ system, messages, onText }) {
   const { key, model, fallbacks } = config.ai.gemini;
   const models = [...new Set([model, ...fallbacks])];
@@ -20,7 +27,7 @@ export async function streamGemini({ system, messages, onText }) {
     systemInstruction: { parts: [{ text: system }] },
     contents: messages.map((m) => ({
       role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }],
+      parts: [...(m.files ?? []).map(filePart), { text: m.content }],
     })),
   });
 

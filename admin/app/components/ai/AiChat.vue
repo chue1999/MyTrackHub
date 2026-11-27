@@ -19,10 +19,27 @@ interface Conversation {
   provider: string | null
   updatedAt: string
 }
+interface FileInfo {
+  id: number
+  name: string
+  mime: string
+  kind: 'image' | 'pdf' | 'text'
+  size: number
+}
+interface Pending {
+  key: number
+  name: string
+  kind: 'image' | 'pdf' | 'text'
+  status: 'uploading' | 'ready' | 'error'
+  preview?: string
+  error?: string
+  file?: FileInfo
+}
 interface Msg {
   id?: number
   role: 'user' | 'assistant'
   content: string
+  files?: FileInfo[]
   provider?: string | null
   model?: string | null
   error?: string | null
@@ -114,12 +131,123 @@ const inputEl = ref<HTMLTextAreaElement | null>(null)
 function scrollDown() {
   nextTick(() => listEl.value?.scrollTo({ top: listEl.value.scrollHeight }))
 }
-async function send(text = input.value) {
+// ── attachments: 📎 button, paste a picture, or drop files on the chat ──
+const fileEl = ref<HTMLInputElement | null>(null)
+const pending = ref<Pending[]>([])
+const dragging = ref(false)
+const uploading = computed(() => pending.value.some((p) => p.status === 'uploading'))
+const readyFiles = computed(() => pending.value.filter((p) => p.status === 'ready' && p.file).map((p) => p.file!))
+let fileKey = 0
+
+async function addFiles(list: FileList | File[] | null | undefined) {
+  for (const f of Array.from(list ?? [])) {
+    if (pending.value.length >= 10) break
+    const item = reactive<Pending>({
+      key: ++fileKey,
+      name: f.name || 'pasted-image.png',
+      kind: aiFileKind(f.name, f.type),
+      status: 'uploading',
+      preview: f.type.startsWith('image/') ? URL.createObjectURL(f) : undefined,
+    })
+    pending.value.push(item)
+    try {
+      const prepared = await prepareAiFile(f)
+      const res = await fetch(`${config.public.apiBase}/api/v1/admin/ai/files`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${token.value}`,
+          'content-type': 'application/octet-stream',
+          'x-file-name': encodeURIComponent(prepared.name),
+          'x-file-type': prepared.type || 'application/octet-stream',
+        },
+        body: prepared.body,
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(j.message || (res.status === 413 ? 'The file is too big (max 10 MB).' : `Error ${res.status}`))
+      item.file = j as FileInfo
+      item.name = item.file.name
+      item.status = 'ready'
+      if (item.preview) thumbs[item.file.id] = item.preview
+    } catch (e) {
+      item.status = 'error'
+      item.error = (e as Error).message
+    }
+  }
+}
+function pickFiles() {
+  fileEl.value?.click()
+}
+function onPicked(e: Event) {
+  const el = e.target as HTMLInputElement
+  addFiles(el.files)
+  el.value = ''
+}
+function removePending(p: Pending) {
+  pending.value = pending.value.filter((x) => x !== p)
+  if (p.file) api(`/ai/files/${p.file.id}`, { method: 'DELETE' }).catch(() => {})
+  else if (p.preview) URL.revokeObjectURL(p.preview)
+}
+function onPaste(e: ClipboardEvent) {
+  const list = Array.from(e.clipboardData?.files ?? [])
+  if (!list.length) return
+  e.preventDefault()
+  addFiles(list)
+}
+function onDrop(e: DragEvent) {
+  dragging.value = false
+  addFiles(e.dataTransfer?.files)
+}
+function onDragOver(e: DragEvent) {
+  if (e.dataTransfer?.types.includes('Files')) dragging.value = true
+}
+
+// Pictures in the history are loaded with the login token, then shown from memory.
+const thumbs = reactive<Record<number, string>>({})
+async function fileUrl(id: number) {
+  if (thumbs[id]) return thumbs[id]
+  const res = await fetch(`${config.public.apiBase}/api/v1/admin/ai/files/${id}`, {
+    headers: { authorization: `Bearer ${token.value}` },
+  })
+  if (!res.ok) throw new Error(`Error ${res.status}`)
+  return (thumbs[id] = URL.createObjectURL(await res.blob()))
+}
+function thumb(f: FileInfo) {
+  if (!(f.id in thumbs)) {
+    thumbs[f.id] = ''
+    fileUrl(f.id).catch(() => {})
+  }
+  return thumbs[f.id]
+}
+async function openFile(f: FileInfo) {
+  const w = window.open('', '_blank')
+  try {
+    const url = await fileUrl(f.id)
+    if (w) w.location.href = url
+  } catch {
+    w?.close()
+  }
+}
+const FILE_ICON = { image: 'mdi-image-outline', pdf: 'mdi-file-pdf-box', text: 'mdi-file-document-outline' }
+const fileIcon = (name: string, kind: keyof typeof FILE_ICON) =>
+  /\.xlsx$/i.test(name)
+    ? 'mdi-file-excel-outline'
+    : /\.docx$/i.test(name)
+      ? 'mdi-file-word-outline'
+      : FILE_ICON[kind]
+const fileSize = (n: number) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1048576).toFixed(1)} MB`)
+
+const canSend = computed(
+  () => !!provider.value && !busy.value && !uploading.value && (!!input.value.trim() || readyFiles.value.length > 0),
+)
+
+async function send(text = input.value, withFiles = true) {
   const q = text.trim()
-  if (!q || busy.value || !provider.value) return
+  const files = withFiles ? readyFiles.value : []
+  if ((!q && !files.length) || busy.value || !provider.value || (withFiles && uploading.value)) return
   input.value = ''
+  if (withFiles) pending.value = []
   busy.value = true
-  messages.value.push({ role: 'user', content: q })
+  messages.value.push({ role: 'user', content: q, files })
   const answer = reactive<Msg>({ role: 'assistant', content: '', provider: provider.value, streaming: true })
   messages.value.push(answer)
   scrollDown()
@@ -128,7 +256,12 @@ async function send(text = input.value) {
     const res = await fetch(`${config.public.apiBase}/api/v1/admin/ai/ask`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${token.value}` },
-      body: JSON.stringify({ conversationId: current.value, provider: provider.value, text: q }),
+      body: JSON.stringify({
+        conversationId: current.value,
+        provider: provider.value,
+        text: q,
+        fileIds: files.map((f) => f.id),
+      }),
       signal: abort.signal,
     })
     if (!res.ok || !res.body) {
@@ -186,7 +319,8 @@ function onKey(e: KeyboardEvent) {
 }
 function retry(i: number) {
   const q = [...messages.value.slice(0, i)].reverse().find((m) => m.role === 'user')
-  if (q) send(q.content)
+  // The files are already in the conversation, so only the text is asked again.
+  if (q) send(q.content || 'Please look at the attached file(s) again.', false)
 }
 
 // ── display ──
@@ -286,7 +420,19 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
     </button>
 
     <!-- panel -->
-    <section v-else class="ai-panel" :class="{ wide }">
+    <section
+      v-else
+      class="ai-panel"
+      :class="{ wide }"
+      @dragover.prevent="onDragOver"
+      @dragleave.self="dragging = false"
+      @drop.prevent="onDrop"
+    >
+      <div v-if="dragging" class="ai-drop" @dragleave="dragging = false">
+        <AiTiger :size="72" mood="happy" />
+        <div class="font-weight-bold mt-2">Drop files here</div>
+        <div class="text-caption">Pictures, PDF, Word, Excel, CSV, text · up to 10 MB each</div>
+      </div>
       <header class="ai-head">
         <div class="ai-brand">
           <span class="ai-avatar"><AiTiger :size="40" :mood="busy ? 'think' : 'idle'" /></span>
@@ -364,7 +510,20 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
 
             <div v-for="(m, i) in messages" :key="m.id ?? `n${i}`" class="ai-msg" :class="m.role">
               <div v-if="m.role === 'user'" class="ai-user">
-                <div class="ai-bubble">{{ m.content }}</div>
+                <div v-if="m.files?.length" class="ai-files">
+                  <template v-for="f in m.files" :key="f.id">
+                    <button v-if="f.kind === 'image'" class="ai-img" :title="f.name" @click="openFile(f)">
+                      <img v-if="thumb(f)" :src="thumb(f)" :alt="f.name" />
+                      <v-progress-circular v-else indeterminate size="18" width="2" />
+                    </button>
+                    <button v-else class="ai-file" :title="f.name" @click="openFile(f)">
+                      <v-icon :icon="fileIcon(f.name, f.kind)" size="22" />
+                      <span class="ai-file-name">{{ f.name }}</span>
+                      <span class="ai-file-size">{{ fileSize(f.size) }}</span>
+                    </button>
+                  </template>
+                </div>
+                <div v-if="m.content" class="ai-bubble">{{ m.content }}</div>
                 <button class="ai-link ai-user-copy" @click="copy(m.content, i)">
                   <v-icon :icon="copied === i ? 'mdi-check' : 'mdi-content-copy'" size="14" />
                   {{ copied === i ? 'Copied' : 'Copy' }}
@@ -393,7 +552,32 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
             </div>
           </div>
 
+          <div v-if="pending.length" class="ai-pending">
+            <div v-for="p in pending" :key="p.key" class="ai-pchip" :class="p.status" :title="p.error || p.name">
+              <img v-if="p.preview" :src="p.preview" alt="" />
+              <v-icon v-else :icon="fileIcon(p.name, p.kind)" size="22" />
+              <div class="ai-pchip-text">
+                <span class="ai-file-name">{{ p.name }}</span>
+                <span class="ai-file-size">
+                  {{ p.status === 'uploading' ? 'Uploading…' : p.status === 'error' ? p.error : fileSize(p.file?.size ?? 0) }}
+                </span>
+              </div>
+              <v-progress-circular v-if="p.status === 'uploading'" indeterminate size="16" width="2" />
+              <button class="ai-pchip-x" title="Remove" @click="removePending(p)">
+                <v-icon icon="mdi-close" size="14" />
+              </button>
+            </div>
+          </div>
           <footer class="ai-input">
+            <input ref="fileEl" type="file" multiple hidden :accept="AI_ACCEPT" @change="onPicked" />
+            <v-btn
+              icon="mdi-paperclip"
+              variant="text"
+              size="small"
+              title="Attach pictures or files (or paste / drop them here)"
+              :disabled="!provider || pending.length >= 10"
+              @click="pickFiles"
+            />
             <textarea
               ref="inputEl"
               v-model="input"
@@ -401,6 +585,7 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
               :placeholder="provider ? `Message ${currentProvider?.name}…  (Enter to send, Shift+Enter new line)` : ''"
               :disabled="!provider"
               @keydown="onKey"
+              @paste="onPaste"
             />
             <v-btn v-if="busy" icon="mdi-stop" color="error" variant="tonal" size="small" title="Stop" @click="stop" />
             <v-btn
@@ -409,7 +594,7 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
               color="primary"
               variant="flat"
               size="small"
-              :disabled="!input.trim() || !provider"
+              :disabled="!canSend"
               title="Send"
               @click="send()"
             />
@@ -864,7 +1049,7 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
   align-items: flex-end;
   gap: 8px;
   margin: 0 12px;
-  padding: 8px 8px 8px 14px;
+  padding: 8px 8px 8px 4px;
   border-radius: 16px;
   border: 1px solid rgba(var(--v-theme-on-surface), 0.15);
 }
@@ -934,5 +1119,120 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
 }
 .ai-md :deep(.ai-block:has(table)) {
   padding-top: 30px;
+}
+
+/* attachments */
+.ai-drop {
+  position: absolute;
+  inset: 8px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 18px;
+  border: 2px dashed #f5b301;
+  background: rgba(255, 246, 214, 0.95);
+  color: #2b1a10;
+  pointer-events: none;
+}
+.ai-files {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.ai-img {
+  display: grid;
+  place-items: center;
+  width: 140px;
+  height: 140px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+}
+.ai-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ai-file,
+.ai-pchip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 240px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  text-align: left;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  background: rgb(var(--v-theme-surface));
+}
+.ai-file:hover {
+  border-color: #f5b301;
+}
+.ai-file,
+.ai-pchip-text {
+  min-width: 0;
+}
+.ai-file {
+  flex-direction: row;
+}
+.ai-pchip-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+.ai-file-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-file-size {
+  font-size: 0.7rem;
+  color: rgba(var(--v-theme-on-surface), 0.55);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-pending {
+  display: flex;
+  gap: 6px;
+  margin: 0 12px 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.ai-pchip {
+  flex: none;
+  max-width: 220px;
+}
+.ai-pchip img {
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+.ai-pchip.error {
+  border-color: rgb(var(--v-theme-error));
+  background: rgba(var(--v-theme-error), 0.06);
+}
+.ai-pchip.error .ai-file-size {
+  color: rgb(var(--v-theme-error));
+  white-space: normal;
+}
+.ai-pchip-x {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border-radius: 50%;
+  background: rgba(var(--v-theme-on-surface), 0.08);
+}
+.ai-pchip-x:hover {
+  background: rgba(var(--v-theme-on-surface), 0.18);
 }
 </style>
