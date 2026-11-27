@@ -78,6 +78,10 @@ const schema = z.object({
   SMS_COUNTRY_CODE: z.string().default(''),
   // Optional separate settings for NewPassword SMS (account created / new password).
   // Each one falls back to the SMS_ value above when empty.
+  // SMS texts. {code} = the 6-digit OTP, {minutes} = how long it is valid,
+  // {password} = the new password, {name} = the username.
+  SMS_OTP_TEMPLATE: z.string().default('OTP: {code} ເພື່ອເຂົ້າລະບົບເວັບ Ccare ນັ້ນເຈົ້າ.'),
+  SMS_PASSWORD_TEMPLATE: z.string().default('NewPassword: {password}'),
   // Temporary: when the NewPassword SMS fails, show the password once to the
   // admin instead (logged). For use until the gateway accepts this server.
   SMS_PASSWORD_FALLBACK: z
@@ -177,6 +181,7 @@ export const config = Object.freeze({
     countryCode: env.SMS_COUNTRY_CODE,
   }),
   smsPasswordFallback: env.SMS_PASSWORD_FALLBACK,
+  smsTemplates: Object.freeze({ otp: env.SMS_OTP_TEMPLATE, password: env.SMS_PASSWORD_TEMPLATE }),
 
   // NewPassword SMS: own gateway settings when given, otherwise the same as above.
   smsPassword: Object.freeze({

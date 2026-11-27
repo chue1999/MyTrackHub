@@ -420,7 +420,7 @@ function toast(text: string, color = 'success') {
             rounded="lg"
             class="mb-4"
             icon="mdi-message-lock-outline"
-            text="No password to type: the system creates one (8 characters: A–Z, a–z, 0–9) and sends it by SMS to the phone below. Every sign-in also needs an SMS code."
+            text="No password to type: the system creates one (8 characters: 1 upper-case, 1 lower-case, 6 digits) and sends it by SMS to the phone below. Every sign-in also needs an SMS code."
           />
           <v-text-field v-model="form.nameLa" label="Name (Lao)" variant="outlined" density="comfortable" />
           <div class="d-flex ga-3">
@@ -480,7 +480,7 @@ function toast(text: string, color = 'success') {
         </v-card-item>
         <v-card-text>
           <template v-if="pwTarget?.staffTel">
-            A new password (8 characters: A–Z, a–z, 0–9) is created and sent by SMS to
+            A new password (8 characters: 1 upper-case, 1 lower-case, 6 digits) is created and sent by SMS to
             <strong class="text-mono">{{ pwTarget.staffTel }}</strong>. The old password stops working. A closed account
             is reopened.
           </template>

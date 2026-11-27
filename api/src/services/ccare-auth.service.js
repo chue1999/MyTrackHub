@@ -65,10 +65,7 @@ export function assertCanText(phone) {
  */
 export async function deliverPassword({ user, password, reason, actor, ip }) {
   assertCanText(user.staffTel);
-  const content =
-    reason === 'create'
-      ? `MyTPlus CCare: your account "${user.name}" is ready. Password: ${password} . Sign in, then confirm with the SMS code.`
-      : `MyTPlus CCare: new password for "${user.name}": ${password} . Do not share it.`;
+  const content = fill(config.smsTemplates.password, { password, name: user.name });
   let gateway = 'disabled';
   if (config.smsPassword.enabled) {
     const r = await sendSms(normalizePhone(user.staffTel), content, config.smsPassword).catch((err) => ({
@@ -112,6 +109,9 @@ export async function deliverPassword({ user, password, reason, actor, ip }) {
   if (!config.smsPassword.enabled && !config.isProduction) out.devPassword = password;
   return out;
 }
+
+/** "OTP: {code}" + { code: 123456 } → "OTP: 123456" */
+const fill = (template, values) => template.replace(/\{(\w+)\}/g, (m, k) => (k in values ? String(values[k]) : m));
 
 function store(data) {
   const id = crypto.randomBytes(24).toString('hex');
@@ -162,7 +162,11 @@ async function issueCode({ user, purpose, action, ip }) {
 
   const code = newCode();
   const challenge = store({ userId: user.id, name: user.name, phone, codeHash: sha(code), purpose });
-  const content = `MyTPlus CCare code: ${code} (valid ${Math.round(config.otp.ttlMs / 60000)} min). Do not share it.`;
+  const content = fill(config.smsTemplates.otp, {
+    code,
+    minutes: Math.round(config.otp.ttlMs / 60000),
+    name: user.name,
+  });
 
   let gateway = 'disabled';
   if (config.sms.enabled) {
