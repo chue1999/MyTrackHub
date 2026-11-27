@@ -64,6 +64,7 @@ const messages = ref<Msg[]>([])
 const input = ref('')
 const busy = ref(false)
 const loaded = ref(false)
+const initError = ref('')
 let abort: AbortController | null = null
 
 // Remember the panel state and the chosen AI across page reloads (this browser only).
@@ -98,6 +99,7 @@ watch(provider, (v) => v && save('provider', v))
 async function init() {
   if (loaded.value || !admin.value || admin.value.kind === 'ccare') return // no AI chat for CCare accounts
   loaded.value = true
+  initError.value = ''
   try {
     providers.value = await api<Provider[]>('/ai/providers')
     const pref = saved('provider')
@@ -105,9 +107,19 @@ async function init() {
     await loadHistory()
     const last = Number(saved('conversation'))
     if (last && conversations.value.some((c) => c.id === last)) await openConversation(last)
-  } catch {
+  } catch (e) {
     loaded.value = false
+    const err = e as { status?: number; statusCode?: number; data?: { message?: string }; message?: string }
+    const status = err.status ?? err.statusCode
+    initError.value =
+      status === 404
+        ? 'The API on the server is an old version (no AI yet). Update it: git pull, npm install, then pm2 restart mytrackhub-api.'
+        : (err.data?.message ?? err.message ?? 'Could not reach the AI service.')
   }
+}
+function retryInit() {
+  loaded.value = false
+  init()
 }
 async function loadHistory() {
   conversations.value = await api<Conversation[]>('/ai/conversations')
@@ -611,6 +623,12 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
                 </template>
                 <template v-else>Ask an administrator to set up the AI assistant.</template>
               </div>
+            </div>
+            <div v-else-if="initError" class="ai-empty">
+              <div class="ai-hero"><AiTiger :size="80" mood="think" /></div>
+              <div class="font-weight-bold mb-1">The AI service is not reachable</div>
+              <div class="text-caption mb-3">{{ initError }}</div>
+              <v-btn size="small" variant="tonal" prepend-icon="mdi-refresh" @click="retryInit">Try again</v-btn>
             </div>
             <div v-else-if="!messages.length" class="ai-empty">
               <div class="ai-hero"><AiTiger :size="96" mood="wave" /></div>
