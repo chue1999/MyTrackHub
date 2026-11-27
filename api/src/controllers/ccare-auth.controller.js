@@ -18,7 +18,12 @@ export async function forgot(req, res) {
   res.json(await ccareAuth.startForgot({ ...req.body, ip: ipOf(req) }));
 }
 
-/** POST /auth/ccare/reset — code + new password. */
+/** POST /auth/ccare/reset/check — is the SMS code right? → a ticket for setting the new password. */
+export async function resetCheck(req, res) {
+  res.json(await ccareAuth.checkResetCode({ ...req.body, ip: ipOf(req) }));
+}
+
+/** POST /auth/ccare/reset — ticket (or code) + new password. */
 export async function reset(req, res) {
   await ccareAuth.resetPassword({ ...req.body, ip: ipOf(req) });
   res.json({ ok: true });

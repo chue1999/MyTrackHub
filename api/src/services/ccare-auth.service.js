@@ -372,11 +372,31 @@ export async function startForgot({ name, ip }) {
   return { challenge: crypto.randomBytes(24).toString('hex'), phoneHint: '••••••••', length: config.otp.length };
 }
 
-/** Forgot password, step 2: the code + a new password. */
-export async function resetPassword({ challenge, code, newPassword, ip }) {
+/**
+ * Forgot password, step 2: check the SMS code. A right code is swapped for a
+ * one-use ticket (valid as long as a code), used in step 3 to set the password.
+ */
+export async function checkResetCode({ challenge, code, ip }) {
   const entry = take(challenge, 'reset', code, ip);
+  await logCcare({ ccareUserId: entry.userId, name: entry.name, action: 'forgot_code_ok', success: true, ip });
+  return { ticket: store({ userId: entry.userId, name: entry.name, purpose: 'resetReady' }) };
+}
+
+/** Forgot password, step 3: the ticket from step 2 (or the code itself) + a new password. */
+export async function resetPassword({ challenge, code, newPassword, ip }) {
+  const entry = code ? take(challenge, 'reset', code, ip) : takeTicket(challenge);
   await ccare.resetPassword(entry.userId, newPassword);
   await logCcare({ ccareUserId: entry.userId, name: entry.name, action: 'password_reset', success: true, ip });
+}
+
+/** A ticket from a checked reset code: one use, expires like a code. */
+function takeTicket(ticket) {
+  const entry = challenges.get(ticket);
+  challenges.delete(ticket);
+  if (!entry || entry.purpose !== 'resetReady' || Date.now() > entry.expires) {
+    throw HttpError.badRequest('This reset has expired. Please start again.');
+  }
+  return entry;
 }
 
 /** Validates a code and consumes the challenge (one chance per code, max 5 tries). */

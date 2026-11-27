@@ -9,7 +9,7 @@ import type { OtpChallenge } from '~/composables/useAuth'
 definePageMeta({ layout: false })
 useHead({ title: 'My CCare — Sign in' })
 
-const { ccareStart, ccareVerify, ccareForgot, ccareReset, ccareRegister, ccareConfig } = useAuth()
+const { ccareStart, ccareVerify, ccareForgot, ccareResetCheck, ccareReset, ccareRegister, ccareConfig } = useAuth()
 const route = useRoute()
 
 // In "proxy" mode passwords live in the My CCare system, so self-service create
@@ -26,7 +26,7 @@ onMounted(async () => {
   }
 })
 
-type Step = 'password' | 'otp' | 'register' | 'forgotName' | 'forgotOtp'
+type Step = 'password' | 'otp' | 'register' | 'forgotName' | 'forgotOtp' | 'forgotNew'
 const step = ref<Step>('password')
 const loading = ref(false)
 const error = ref('')
@@ -41,6 +41,8 @@ const showPw = ref(false)
 const challenge = ref<OtpChallenge | null>(null)
 const code = ref('')
 const resetPw = ref('')
+const resetTicket = ref('')
+const resetPw2 = ref('')
 
 // Register fields.
 const reg = reactive({ name: '', password: '', nameLa: '', staffId: '', staffTel: '', division: '' })
@@ -107,11 +109,46 @@ const startForgot = () =>
     go('forgotOtp')
   })
 
+// Forgot password: as soon as all digits are typed the code is checked; a right
+// code goes straight to the new-password page, a wrong one is cleared to retype.
+const checkResetCode = () => {
+  if (loading.value || code.value.length < (challenge.value?.length ?? 6)) return
+  return run(async () => {
+    try {
+      const r = await ccareResetCheck(challenge.value!.challenge, code.value.trim())
+      resetTicket.value = r.ticket
+      resetPw.value = ''
+      resetPw2.value = ''
+      go('forgotNew')
+    } catch (e) {
+      code.value = ''
+      throw e
+    }
+  })
+}
+const resendForgot = () =>
+  run(async () => {
+    challenge.value = await ccareForgot(name.value.trim())
+    code.value = ''
+    notice.value = 'A new code has been sent.'
+  })
+const pwMatch = computed(() => !!resetPw2.value && resetPw.value === resetPw2.value)
+
 const doReset = () =>
   run(async () => {
-    await ccareReset(challenge.value!.challenge, code.value.trim(), resetPw.value)
-    notice.value = 'Password changed. Please sign in.'
+    try {
+      await ccareReset(resetTicket.value, resetPw.value)
+    } catch (e) {
+      // The ticket is used up / expired: start the reset again.
+      if (/expired|start again/i.test(errorMessage(e, ''))) {
+        code.value = ''
+        go('forgotName')
+      }
+      throw e
+    }
+    notice.value = 'Password changed. Please sign in with your new password.'
     password.value = ''
+    resetTicket.value = ''
     go('password')
   })
 
@@ -416,12 +453,17 @@ const features = [
                 </div>
               </form>
 
-              <!-- Step: forgot — OTP + new password -->
-              <form v-else-if="step === 'forgotOtp'" @submit.prevent="doReset">
+              <!-- Step: forgot — code (checked as soon as it is complete) -->
+              <form v-else-if="step === 'forgotOtp'" @submit.prevent="checkResetCode">
+                <div class="cc-steps">
+                  <span class="on">1 · Code</span>
+                  <span class="line" />
+                  <span>2 · New password</span>
+                </div>
                 <div class="text-overline text-primary font-weight-bold">Reset</div>
-                <h2 class="cc-h1">New password</h2>
+                <h2 class="cc-h1">Enter code</h2>
                 <p class="cc-lead">
-                  Enter the code sent to <b>{{ challenge?.phoneHint }}</b> and your new password.
+                  We sent a {{ challenge?.length ?? 6 }}-digit code to <b>{{ challenge?.phoneHint }}</b>.
                 </p>
                 <v-alert
                   v-if="challenge?.devCode"
@@ -432,8 +474,42 @@ const features = [
                   class="mb-3"
                   :text="`Test code (SMS off): ${challenge.devCode}`"
                 />
-                <label class="cc-label">Code</label>
-                <v-otp-input v-model="code" :length="challenge?.length ?? 6" type="number" class="cc-otp mb-2" />
+                <v-otp-input
+                  v-model="code"
+                  :length="challenge?.length ?? 6"
+                  type="number"
+                  class="cc-otp"
+                  :class="{ 'cc-otp--error': !!error }"
+                  :loading="loading"
+                  :disabled="loading"
+                  autofocus
+                  @finish="checkResetCode"
+                />
+                <div class="cc-otp-hint">
+                  <template v-if="loading"><v-progress-circular indeterminate size="14" width="2" /> Checking…</template>
+                  <template v-else>The next step opens by itself when the code is right.</template>
+                </div>
+                <div class="d-flex justify-space-between mt-5 text-body-2">
+                  <a href="#" class="cc-link" @click.prevent="go('forgotName')">← Back</a>
+                  <a href="#" class="cc-link" @click.prevent="resendForgot">Resend code</a>
+                </div>
+              </form>
+
+              <!-- Step: forgot — new password (after a right code) -->
+              <form v-else-if="step === 'forgotNew'" @submit.prevent="doReset">
+                <div class="cc-steps">
+                  <span class="done"><v-icon icon="mdi-check" size="14" /> Code</span>
+                  <span class="line done" />
+                  <span class="on">2 · New password</span>
+                </div>
+                <div class="cc-verified">
+                  <v-icon icon="mdi-shield-check" size="22" />
+                  <div>
+                    <b>Code verified</b>
+                    <div class="text-caption">Now choose a new password for <b>{{ name }}</b>.</div>
+                  </div>
+                </div>
+                <h2 class="cc-h1">New password</h2>
                 <label class="cc-label">New password</label>
                 <v-text-field
                   v-model="resetPw"
@@ -445,6 +521,7 @@ const features = [
                   flat
                   rounded="lg"
                   hide-details
+                  autofocus
                   autocomplete="new-password"
                   @click:append-inner="showPw = !showPw"
                 />
@@ -453,6 +530,19 @@ const features = [
                     <v-icon :icon="c.ok ? 'mdi-check-circle' : 'mdi-circle-outline'" size="16" />{{ c.label }}
                   </li>
                 </ul>
+                <label class="cc-label">Confirm new password</label>
+                <v-text-field
+                  v-model="resetPw2"
+                  :type="showPw ? 'text' : 'password'"
+                  :maxlength="PASSWORD_MAX"
+                  prepend-inner-icon="mdi-lock-check-outline"
+                  variant="solo-filled"
+                  flat
+                  rounded="lg"
+                  autocomplete="new-password"
+                  :error-messages="resetPw2 && !pwMatch ? 'The two passwords are not the same' : ''"
+                  :hide-details="!resetPw2 || pwMatch"
+                />
                 <v-btn
                   type="submit"
                   color="primary"
@@ -460,10 +550,10 @@ const features = [
                   size="x-large"
                   rounded="lg"
                   :loading="loading"
-                  :disabled="code.length < (challenge?.length ?? 6) || !passwordOk(resetPw)"
+                  :disabled="!passwordOk(resetPw) || !pwMatch"
                   class="mt-3 text-none text-black font-weight-bold"
                 >
-                  Change password
+                  Save new password
                 </v-btn>
                 <div class="text-center mt-5 text-body-2">
                   <a href="#" class="cc-link" @click.prevent="go('password')">← Back to sign in</a>
@@ -762,6 +852,64 @@ const features = [
     animation: none !important;
     transition: none !important;
   }
+}
+.cc-steps {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 18px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: rgba(var(--v-theme-on-surface), 0.45);
+}
+.cc-steps .on {
+  color: rgb(var(--v-theme-on-surface));
+}
+.cc-steps .done {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: #16a34a;
+}
+.cc-steps .line {
+  flex: 0 0 36px;
+  height: 2px;
+  border-radius: 2px;
+  background: rgba(var(--v-theme-on-surface), 0.15);
+}
+.cc-steps .line.done {
+  background: #16a34a;
+}
+.cc-otp-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  margin-top: 6px;
+  font-size: 0.82rem;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+}
+.cc-otp--error :deep(.v-field) {
+  animation: cc-shake 0.35s;
+}
+@keyframes cc-shake {
+  25% {
+    transform: translateX(-5px);
+  }
+  75% {
+    transform: translateX(5px);
+  }
+}
+.cc-verified {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  color: #166534;
+  background: rgba(22, 163, 74, 0.1);
+  border: 1px solid rgba(22, 163, 74, 0.25);
 }
 .pw-rules {
   list-style: none;

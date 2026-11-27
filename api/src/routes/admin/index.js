@@ -10,6 +10,7 @@ import { HttpError } from '../../utils/http-error.js';
 import { loginSchema } from '../../validators/auth.validator.js';
 import {
   ccareForgotSchema,
+  ccareResetCheckSchema,
   ccareResetSchema,
   ccareStartSchema,
   ccareVerifySchema,
@@ -51,6 +52,12 @@ router.post(
   loginLimiter,
   validate({ body: ccareForgotSchema }),
   asyncHandler(ccareAuthController.forgot),
+);
+router.post(
+  '/auth/ccare/reset/check',
+  loginLimiter,
+  validate({ body: ccareResetCheckSchema }),
+  asyncHandler(ccareAuthController.resetCheck),
 );
 router.post(
   '/auth/ccare/reset',

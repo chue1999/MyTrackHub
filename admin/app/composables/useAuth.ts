@@ -44,8 +44,11 @@ export function useAuth() {
     return setSession(await post('/auth/ccare/verify', { challenge, code }))
   }
   const ccareForgot = (name: string) => post<OtpChallenge>('/auth/ccare/forgot', { name })
-  const ccareReset = (challenge: string, code: string, newPassword: string) =>
-    post('/auth/ccare/reset', { challenge, code, newPassword })
+  // Forgot password: check the SMS code (→ ticket), then set the new password with the ticket.
+  const ccareResetCheck = (challenge: string, code: string) =>
+    post<{ ticket: string }>('/auth/ccare/reset/check', { challenge, code })
+  const ccareReset = (ticket: string, newPassword: string) =>
+    post('/auth/ccare/reset', { challenge: ticket, newPassword })
   const ccareRegister = (body: Record<string, unknown>) => post('/auth/ccare/register', body)
   const ccareConfig = () =>
     $fetch<{ mode: string; canRegister: boolean; canReset: boolean }>('/api/v1/admin/auth/ccare/config', {
@@ -70,6 +73,7 @@ export function useAuth() {
     ccareVerify,
     ccareForgot,
     ccareReset,
+    ccareResetCheck,
     ccareRegister,
     ccareConfig,
     logout,

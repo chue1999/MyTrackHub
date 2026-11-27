@@ -64,9 +64,11 @@ const challenge = z.string().trim().min(10).max(80);
 export const ccareStartSchema = z.object({ name: loginName, password: z.string().min(1, 'Enter your password') });
 export const ccareVerifySchema = z.object({ challenge, code });
 export const ccareForgotSchema = z.object({ name: loginName });
+export const ccareResetCheckSchema = z.object({ challenge, code });
+// After /reset/check, `challenge` is the ticket and no code is needed.
 export const ccareResetSchema = z.object({
   challenge,
-  code,
+  code: code.optional(),
   newPassword: passwordRule,
 });
 
