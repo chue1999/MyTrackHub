@@ -258,10 +258,6 @@ const fileIcon = (name: string, kind: keyof typeof FILE_ICON) =>
       : FILE_ICON[kind]
 const fileSize = (n: number) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1048576).toFixed(1)} MB`)
 
-// 🎨: the next question makes / edits a picture (Gemini image model).
-const imageMode = ref(false)
-const canImage = computed(() => !!currentProvider.value?.images)
-
 const canSend = computed(
   () => !!provider.value && !busy.value && !uploading.value && (!!input.value.trim() || readyFiles.value.length > 0),
 )
@@ -273,7 +269,6 @@ async function send(text = input.value, withFiles = true) {
   input.value = ''
   if (withFiles) pending.value = []
   busy.value = true
-  imageMode.value = false
   messages.value.push({ role: 'user', content: q, files })
   const answer = reactive<Msg>({ role: 'assistant', content: '', provider: provider.value, streaming: true })
   messages.value.push(answer)
@@ -287,7 +282,6 @@ async function send(text = input.value, withFiles = true) {
         conversationId: current.value,
         provider: provider.value,
         text: q,
-        mode: imageMode.value && canImage.value ? 'image' : 'auto',
         fileIds: files.map((f) => f.id),
       }),
       signal: abort.signal,
@@ -739,26 +733,11 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
               :disabled="!provider || pending.length >= 10"
               @click="pickFiles"
             />
-            <v-btn
-              v-if="canImage"
-              icon="mdi-palette-outline"
-              :variant="imageMode ? 'flat' : 'text'"
-              :color="imageMode ? 'primary' : undefined"
-              size="small"
-              :title="imageMode ? 'Picture mode on: the next question creates / edits a picture' : 'Create or edit a picture'"
-              @click="imageMode = !imageMode"
-            />
             <textarea
               ref="inputEl"
               v-model="input"
               rows="1"
-              :placeholder="
-                !provider
-                  ? ''
-                  : imageMode
-                    ? 'Describe the picture to create, or attach one and say what to change…'
-                    : `Message ${currentProvider?.name}…  (Enter to send, Shift+Enter new line)`
-              "
+              :placeholder="provider ? `Message ${currentProvider?.name}…  (Enter to send, Shift+Enter new line)` : ''"
               :disabled="!provider"
               @keydown="onKey"
               @paste="onPaste"

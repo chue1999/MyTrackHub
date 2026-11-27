@@ -24,8 +24,8 @@ const SYSTEM = [
   'When the user wants a file: put spreadsheet data (Excel/CSV) in a Markdown table, and code, CSV, JSON, SQL or',
   'other file contents in a fenced code block with the right language; the website shows Download buttons',
   '(Excel for tables, a file for code blocks, Word and PDF for the whole answer). Never say a file cannot be made.',
-  'You cannot create or edit pictures yourself in this text chat; the website has a separate picture tool',
-  '(the 🎨 button). Never pretend that you created, edited or attached a picture.',
+  'You cannot create or edit pictures yourself in this text chat (a separate picture tool handles requests',
+  'like "draw…"). Never pretend that you created, edited or attached a picture.',
 ].join(' ');
 
 // How many earlier messages are sent back to the model with each question.
@@ -130,7 +130,7 @@ export async function ask(me, { conversationId, provider, text, fileIds = [], mo
     if (!res.writableFinished) stop.abort();
   });
 
-  // Picture wanted (🎨 button, or words like "draw…", "design this picture"): Gemini's image model.
+  // Picture wanted (words like "draw…", "design this picture"): Gemini's image model.
   const imageMode =
     provider === 'gemini' && config.ai.gemini.imageModels.length && (mode === 'image' || (mode === 'auto' && wantsImage(text)));
   if (imageMode) {
