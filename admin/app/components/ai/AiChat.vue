@@ -44,6 +44,7 @@ interface Msg {
   model?: string | null
   error?: string | null
   streaming?: boolean
+  status?: string
   createdAt?: string
 }
 
@@ -288,7 +289,10 @@ async function send(text = input.value, withFiles = true) {
         if (ev.type === 'start' && ev.conversationId) {
           current.value = ev.conversationId
           save('conversation', String(ev.conversationId))
+        } else if (ev.type === 'status' && ev.text) {
+          answer.status = ev.text
         } else if (ev.type === 'text' && ev.text) {
+          answer.status = undefined
           answer.content += ev.text
           scrollDown()
         } else if (ev.type === 'done') {
@@ -537,7 +541,10 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
                 </div>
                 <!-- eslint-disable-next-line vue/no-v-html -- sanitised with DOMPurify -->
                 <div v-if="m.content" class="ai-md" v-html="md(m.content)" />
-                <div v-else-if="m.streaming" class="ai-typing"><span /><span /><span /></div>
+                <div v-else-if="m.streaming" class="ai-typing">
+                  <span /><span /><span />
+                  <em v-if="m.status" class="ai-status-line">{{ m.status }}</em>
+                </div>
                 <div v-if="m.error" class="ai-error">
                   <v-icon icon="mdi-alert-circle-outline" size="16" />{{ m.error }}
                   <button class="ai-link" @click="retry(i)">Try again</button>
@@ -990,6 +997,7 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
 }
 .ai-typing {
   display: flex;
+  align-items: center;
   gap: 4px;
   padding: 6px 0;
 }
@@ -1234,5 +1242,11 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
 }
 .ai-pchip-x:hover {
   background: rgba(var(--v-theme-on-surface), 0.18);
+}
+.ai-status-line {
+  margin-left: 6px;
+  font-size: 0.75rem;
+  font-style: normal;
+  color: rgba(var(--v-theme-on-surface), 0.6);
 }
 </style>

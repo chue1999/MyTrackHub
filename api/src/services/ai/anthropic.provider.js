@@ -22,7 +22,7 @@ function toClaude(m) {
   return { role: 'user', content: [...blocks, { type: 'text', text: m.content }] };
 }
 
-export async function streamClaude({ system, messages, onText }) {
+export async function streamClaude({ system, messages, onText, signal }) {
   const stream = getClient().beta.messages.stream({
     model: config.ai.anthropic.model,
     max_tokens: 64000,
@@ -30,7 +30,7 @@ export async function streamClaude({ system, messages, onText }) {
     fallbacks: 'default',
     system,
     messages: messages.map(toClaude),
-  });
+  }, { signal });
   for await (const event of stream) {
     if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') onText(event.delta.text);
   }

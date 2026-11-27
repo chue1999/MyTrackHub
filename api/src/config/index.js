@@ -116,7 +116,9 @@ const schema = z.object({
   GEMINI_API_KEY: z.string().default(''),
   GEMINI_MODEL: z.string().default('gemini-3.5-flash'),
   // Tried in order when the main model is busy (free tier "high demand").
-  GEMINI_FALLBACK_MODELS: z.string().default('gemini-3.8-flash,gemini-flash-lite-latest'),
+  GEMINI_FALLBACK_MODELS: z.string().default('gemini-flash-lite-latest'),
+  // true: no "thinking", so answers start in ~2-3 s like the Gemini website.
+  GEMINI_FAST: z.string().default('true').transform((v) => v !== 'false'),
   OPENAI_API_KEY: z.string().default(''),
   OPENAI_MODEL: z.string().default('gpt-4o-mini'),
   ANTHROPIC_API_KEY: z.string().default(''),
@@ -219,6 +221,7 @@ export const config = Object.freeze({
     gemini: Object.freeze({
       key: env.GEMINI_API_KEY,
       model: env.GEMINI_MODEL,
+      fast: env.GEMINI_FAST,
       fallbacks: env.GEMINI_FALLBACK_MODELS.split(',')
         .map((m) => m.trim())
         .filter(Boolean),

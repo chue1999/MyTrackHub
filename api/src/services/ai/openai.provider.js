@@ -15,10 +15,11 @@ function toOpenAi(m) {
 }
 
 /** ChatGPT (OpenAI) via the Chat Completions REST API, streamed. */
-export async function streamOpenAi({ system, messages, onText }) {
+export async function streamOpenAi({ system, messages, onText, signal }) {
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${config.ai.openai.key}` },
+    signal,
     body: JSON.stringify({
       model: config.ai.openai.model,
       stream: true,

@@ -111,11 +111,19 @@ export async function ask(me, { conversationId, provider, text, fileIds = [] }, 
   const send = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
   send({ type: 'start', conversationId: Number(conv.id) });
 
+  // The person closed the chat / reloaded the page: stop asking the AI.
+  const stop = new AbortController();
+  res.on('close', () => {
+    if (!res.writableFinished) stop.abort();
+  });
+
   let answer = '';
   try {
     const meta = await p.stream({
       system: SYSTEM,
       messages,
+      signal: stop.signal,
+      onStatus: (text) => send({ type: 'status', text }),
       onText: (t) => {
         answer += t;
         send({ type: 'text', text: t });
