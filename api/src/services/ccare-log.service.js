@@ -18,7 +18,7 @@ export async function logCcare(entry) {
  * MyTPlus system deletes (admin accounts, event clean-up, SQL console). Kept in
  * the same audit table but only MyTPlus administrators see them.
  */
-export const SYSTEM_ACTIONS = ['admin_account_delete', 'events_purged', 'sql_delete'];
+export const SYSTEM_ACTIONS = ['admin_account_delete', 'events_purged', 'server_logs_purged', 'sql_delete'];
 /** Entries that record a delete can never be deleted themselves. */
 export const PROTECTED_ACTIONS = ['log_deleted', 'logs_cleared', ...SYSTEM_ACTIONS];
 

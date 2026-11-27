@@ -199,6 +199,7 @@ const LABELS: Record<string, string> = {
   logs_cleared: 'Logs cleared',
   admin_account_delete: 'Admin account deleted',
   events_purged: 'Old app events deleted',
+  server_logs_purged: 'Old server logs deleted',
   sql_delete: 'SQL delete run',
 }
 const ICONS: Record<string, string> = {
@@ -227,6 +228,7 @@ const ICONS: Record<string, string> = {
   logs_cleared: 'mdi-broom',
   admin_account_delete: 'mdi-account-remove-outline',
   events_purged: 'mdi-delete-clock-outline',
+  server_logs_purged: 'mdi-delete-clock-outline',
   sql_delete: 'mdi-database-remove-outline',
 }
 const label = (a: string) => LABELS[a] ?? a

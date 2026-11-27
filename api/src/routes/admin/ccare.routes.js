@@ -4,6 +4,7 @@ import * as tplusController from '../../controllers/tplus.controller.js';
 import { requireCcareManage } from '../../middlewares/auth.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import { asyncHandler } from '../../utils/async-handler.js';
+import logCleanupRoutes from './log-cleanup.routes.js';
 import {
   createSchema,
   listQuery,
@@ -48,6 +49,8 @@ router.get('/users/:id/detail', asyncHandler(ccareController.detail));
 router.get('/logs', validate({ query: logsQuery }), asyncHandler(ccareController.logs));
 router.get('/logs/summary', asyncHandler(ccareController.logSummary));
 router.delete('/logs', validate({ query: logsClearQuery }), asyncHandler(ccareController.logsClear));
+// Delete logs older than N days (before /logs/:id so "cleanup" is not taken for an id).
+router.use('/logs-cleanup', requireCcareManage, logCleanupRoutes);
 router.get('/logs/:id', asyncHandler(ccareController.logDetail));
 router.delete('/logs/:id', asyncHandler(ccareController.logDelete));
 router.get('/log-actions', asyncHandler(ccareController.logActions));

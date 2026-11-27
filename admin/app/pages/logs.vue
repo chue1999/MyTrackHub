@@ -29,15 +29,28 @@ const tab = computed<Tab>({
   },
   set: (v) => navigateTo({ path: '/logs', query: { tab: v } }, { replace: true }),
 })
+
+// After "Delete old logs": reload the open log and say how many went.
+const reload = ref(0)
+const snack = ref(false)
+const snackText = ref('')
+function onCleaned(removed: number) {
+  reload.value += 1
+  snackText.value = `${removed.toLocaleString()} old ${removed === 1 ? 'entry' : 'entries'} deleted`
+  snack.value = true
+}
 </script>
 
 <template>
   <div>
-    <div class="mb-4">
-      <h1 class="page-title">Logs</h1>
-      <div class="text-body-2 text-medium-emphasis">
-        {{ tabs.length > 1 ? 'App activity, CCare activity and server activity' : 'CCare activity' }}
+    <div class="d-flex flex-wrap align-center ga-3 mb-4">
+      <div class="flex-grow-1">
+        <h1 class="page-title">Logs</h1>
+        <div class="text-body-2 text-medium-emphasis">
+          {{ tabs.length > 1 ? 'App activity, CCare activity and server activity' : 'CCare activity' }}
+        </div>
       </div>
+      <LogsCleanup :kind="tab" :label="tabs.find((t) => t.value === tab)?.title ?? 'logs'" @done="onCleaned" />
     </div>
 
     <v-tabs v-if="tabs.length > 1" v-model="tab" color="primary" density="comfortable" class="mb-4">
@@ -46,8 +59,10 @@ const tab = computed<Tab>({
       </v-tab>
     </v-tabs>
 
-    <MytplusLogs v-if="tab === 'mytplus' && showMytplus" />
-    <CcareLogs v-else-if="tab === 'ccare' && showCcare" />
-    <ServerLogs v-else-if="tab === 'server' && showMytplus" />
+    <MytplusLogs v-if="tab === 'mytplus' && showMytplus" :key="`m${reload}`" />
+    <CcareLogs v-else-if="tab === 'ccare' && showCcare" :key="`c${reload}`" />
+    <ServerLogs v-else-if="tab === 'server' && showMytplus" :key="`s${reload}`" />
+
+    <v-snackbar v-model="snack" color="success" timeout="4000">{{ snackText }}</v-snackbar>
   </div>
 </template>
