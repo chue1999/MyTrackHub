@@ -104,9 +104,15 @@ async function init() {
     providers.value = await api<Provider[]>('/ai/providers')
     const pref = saved('provider')
     provider.value = (providers.value.find((p) => p.key === pref) ?? providers.value[0])?.key ?? null
-    await loadHistory()
-    const last = Number(saved('conversation'))
-    if (last && conversations.value.some((c) => c.id === last)) await openConversation(last)
+    if (!providers.value.length) return
+    // History is a bonus: if it cannot load, asking still works.
+    try {
+      await loadHistory()
+      const last = Number(saved('conversation'))
+      if (last && conversations.value.some((c) => c.id === last)) await openConversation(last)
+    } catch {
+      conversations.value = []
+    }
   } catch (e) {
     loaded.value = false
     const err = e as { status?: number; statusCode?: number; data?: { message?: string }; message?: string }
