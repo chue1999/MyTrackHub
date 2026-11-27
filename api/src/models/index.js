@@ -1,4 +1,5 @@
 import { Admin } from './admin.model.js';
+import { AiConversation, AiMessage } from './ai.model.js';
 import { AppUser } from './app-user.model.js';
 import { CcareAccountDev } from './ccare-account-dev.model.js';
 import { CcareLog } from './ccare-log.model.js';
@@ -13,6 +14,8 @@ Event.belongsTo(AppUser, { foreignKey: 'userId', as: 'user' });
 
 export {
   Admin,
+  AiConversation,
+  AiMessage,
   AppUser,
   CcareAccountDev,
   CcareLog,

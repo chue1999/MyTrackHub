@@ -17,10 +17,6 @@ export default defineNuxtRouteMiddleware((to) => {
   if (!isLoggedIn.value) return navigateTo('/login')
   // CCare staff only have the CCare + TPLUS service pages; keep them there.
   const ccareAllowed =
-    to.path === '/ccare' ||
-    to.path.startsWith('/ccare-') ||
-    to.path.startsWith('/tplus-') ||
-    to.path === '/logs' ||
-    to.path === '/ai'
+    to.path === '/ccare' || to.path.startsWith('/ccare-') || to.path.startsWith('/tplus-') || to.path === '/logs'
   if (isCcare && !ccareAllowed) return navigateTo('/ccare-vas')
 })

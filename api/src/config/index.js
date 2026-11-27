@@ -111,6 +111,14 @@ const schema = z.object({
   // Capacity history: one reading every N minutes (0 = off), kept N days.
   SERVER_METRICS_INTERVAL_MINUTES: z.coerce.number().int().min(0).max(1440).default(5),
   SERVER_METRICS_KEEP_DAYS: z.coerce.number().int().min(1).max(3650).default(90),
+  // AI chat (website widget). A provider shows up only when its key is set.
+  // Gemini has a free tier (Google AI Studio key); OpenAI and Anthropic are paid.
+  GEMINI_API_KEY: z.string().default(''),
+  GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
+  OPENAI_API_KEY: z.string().default(''),
+  OPENAI_MODEL: z.string().default('gpt-4o-mini'),
+  ANTHROPIC_API_KEY: z.string().default(''),
+  ANTHROPIC_MODEL: z.string().default('claude-opus-5-5'),
   // After this many seconds without a heartbeat an agent is shown as silent.
   SERVER_AGENT_STALE_SECONDS: z.coerce.number().int().positive().default(180),
 
@@ -205,6 +213,11 @@ export const config = Object.freeze({
 
   ccarePasswordMaxAgeDays: env.CCARE_PASSWORD_MAX_AGE_DAYS,
 
+  ai: Object.freeze({
+    gemini: Object.freeze({ key: env.GEMINI_API_KEY, model: env.GEMINI_MODEL }),
+    openai: Object.freeze({ key: env.OPENAI_API_KEY, model: env.OPENAI_MODEL }),
+    anthropic: Object.freeze({ key: env.ANTHROPIC_API_KEY, model: env.ANTHROPIC_MODEL }),
+  }),
   serverMetrics: Object.freeze({
     intervalMs: env.SERVER_METRICS_INTERVAL_MINUTES * 60_000,
     keepDays: env.SERVER_METRICS_KEEP_DAYS,

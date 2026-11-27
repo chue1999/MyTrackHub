@@ -23,6 +23,7 @@ import settingsRoutes from './settings.routes.js';
 import sqlConsoleRoutes from './sql-console.routes.js';
 import serverLogRoutes from './server-log.routes.js';
 import serverRoutes from './server.routes.js';
+import aiRoutes from './ai.routes.js';
 import statsRoutes from './stats.routes.js';
 import userRoutes from './user.routes.js';
 
@@ -73,7 +74,7 @@ router.use(authenticate);
 // never the MyTPlus data endpoints — even by calling the API directly.
 router.use((req, _res, next) => {
   if (req.me.kind !== 'ccare') return next();
-  if (/^\/(ccare|auth|stream)\b/.test(req.path)) return next();
+  if (/^\/(ccare|auth|stream|ai)\b/.test(req.path)) return next();
   next(HttpError.forbidden('CCare accounts can only use the CCare page'));
 });
 
@@ -87,6 +88,7 @@ router.use('/settings', settingsRoutes);
 router.use('/sql', sqlConsoleRoutes);
 router.use('/server-logs', serverLogRoutes);
 router.use('/server', serverRoutes);
+router.use('/ai', aiRoutes);
 router.use('/ccare', ccareRoutes);
 
 export default router;
