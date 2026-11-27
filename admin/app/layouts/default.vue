@@ -137,6 +137,22 @@ const settingsNav = computed(() => [
     : []),
 ])
 
+// AI assistants (opens the free ChatGPT / Gemini / Claude websites): everyone.
+const toolsSection = [
+  {
+    label: 'Tools',
+    items: [
+      {
+        title: 'AI assistants',
+        icon: 'mdi-robot-outline',
+        activeIcon: 'mdi-robot',
+        to: '/ai',
+        active: (p: string) => p.startsWith('/ai'),
+      },
+    ],
+  },
+]
+
 // Logs get their own group above Settings: MyTPlus admins and CCare admins only.
 const logsNav = computed(() =>
   (isCcare.value ? admin.value?.canManage === true : admin.value?.role === 'admin') ? [logsItem] : [],
@@ -150,6 +166,7 @@ const sections = computed(() =>
     ? [
         { label: 'CCare', items: ccareNav.value },
         { label: 'TPLUS Services', items: tplusNav },
+        ...toolsSection,
         ...logsSection.value,
         ...(ccareSettingsNav.value.length ? [{ label: 'Settings', items: ccareSettingsNav.value }] : []),
       ]
@@ -157,6 +174,7 @@ const sections = computed(() =>
         { label: 'Overview', items: overviewNav },
         { label: 'CCare', items: ccareNav.value },
         { label: 'TPLUS Services', items: tplusNav },
+        ...toolsSection,
         ...logsSection.value,
         { label: 'Settings', items: settingsNav.value },
       ],
