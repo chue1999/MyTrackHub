@@ -12,6 +12,7 @@ interface Provider {
   name: string
   maker: string
   model: string
+  images?: boolean
 }
 interface Conversation {
   id: number
@@ -237,6 +238,10 @@ const fileIcon = (name: string, kind: keyof typeof FILE_ICON) =>
       : FILE_ICON[kind]
 const fileSize = (n: number) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1048576).toFixed(1)} MB`)
 
+// 🎨: the next question makes / edits a picture (Gemini image model).
+const imageMode = ref(false)
+const canImage = computed(() => !!currentProvider.value?.images)
+
 const canSend = computed(
   () => !!provider.value && !busy.value && !uploading.value && (!!input.value.trim() || readyFiles.value.length > 0),
 )
@@ -248,6 +253,7 @@ async function send(text = input.value, withFiles = true) {
   input.value = ''
   if (withFiles) pending.value = []
   busy.value = true
+  imageMode.value = false
   messages.value.push({ role: 'user', content: q, files })
   const answer = reactive<Msg>({ role: 'assistant', content: '', provider: provider.value, streaming: true })
   messages.value.push(answer)
@@ -261,6 +267,7 @@ async function send(text = input.value, withFiles = true) {
         conversationId: current.value,
         provider: provider.value,
         text: q,
+        mode: imageMode.value && canImage.value ? 'image' : 'auto',
         fileIds: files.map((f) => f.id),
       }),
       signal: abort.signal,
@@ -280,7 +287,14 @@ async function send(text = input.value, withFiles = true) {
       while ((i = buf.indexOf('\n\n')) >= 0) {
         const chunk = buf.slice(0, i).replace(/^data:\s*/, '')
         buf = buf.slice(i + 2)
-        let ev: { type: string; text?: string; message?: string; conversationId?: number; model?: string }
+        let ev: {
+          type: string
+          text?: string
+          message?: string
+          conversationId?: number
+          model?: string
+          file?: FileInfo
+        }
         try {
           ev = JSON.parse(chunk)
         } catch {
@@ -289,6 +303,9 @@ async function send(text = input.value, withFiles = true) {
         if (ev.type === 'start' && ev.conversationId) {
           current.value = ev.conversationId
           save('conversation', String(ev.conversationId))
+        } else if (ev.type === 'file' && ev.file) {
+          answer.files = [...(answer.files ?? []), ev.file]
+          scrollDown()
         } else if (ev.type === 'status' && ev.text) {
           answer.status = ev.text
         } else if (ev.type === 'text' && ev.text) {
@@ -338,7 +355,7 @@ const when = (iso: string) => {
     ? d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
     : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
 }
-// ── a Copy button on every code block and table inside an answer ──
+// ── buttons on every code block (Copy · Download) and table (Copy · Excel) ──
 // The answer HTML is re-rendered while it streams, so buttons are (re)added
 // after each update; one click handler on the list handles them all.
 function addBlockButtons() {
@@ -348,38 +365,127 @@ function addBlockButtons() {
     wrap.className = 'ai-block'
     el.replaceWith(wrap)
     wrap.appendChild(el)
-    const btn = document.createElement('button')
-    btn.type = 'button'
-    btn.className = 'ai-block-copy'
-    btn.dataset.copy = el.tagName === 'TABLE' ? 'table' : 'code'
-    btn.textContent = el.tagName === 'TABLE' ? 'Copy table' : 'Copy code'
-    wrap.appendChild(btn)
+    const bar = document.createElement('div')
+    bar.className = 'ai-block-bar'
+    const isTable = el.tagName === 'TABLE'
+    const buttons: [string, string][] = isTable
+      ? [
+          ['copy', 'Copy table'],
+          ['xlsx', '⬇ Excel'],
+        ]
+      : [
+          ['copy', 'Copy code'],
+          ['file', '⬇ Download'],
+        ]
+    for (const [action, label] of buttons) {
+      const btn = document.createElement('button')
+      btn.type = 'button'
+      btn.className = 'ai-block-copy'
+      btn.dataset.action = action
+      btn.textContent = label
+      bar.appendChild(btn)
+    }
+    wrap.appendChild(bar)
   })
 }
 onUpdated(addBlockButtons)
 /** Table → tab-separated text, so it pastes into Excel / Google Sheets as cells. */
-const tableText = (t: HTMLTableElement) =>
-  Array.from(t.rows)
-    .map((r) =>
-      Array.from(r.cells)
-        .map((c) => c.innerText.replace(/\s+/g, ' ').trim())
-        .join('\t'),
-    )
-    .join('\n')
+const tableRows = (t: HTMLTableElement) =>
+  Array.from(t.rows).map((r) => Array.from(r.cells).map((c) => c.innerText.replace(/\s+/g, ' ').trim()))
+const tableText = (t: HTMLTableElement) => tableRows(t).map((r) => r.join('\t')).join('\n')
+
+function saveBlob(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 5000)
+}
+const stamp = () => new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')
+
+async function tableToExcel(t: HTMLTableElement) {
+  const ExcelJS = (await import('exceljs')).default
+  const wb = new ExcelJS.Workbook()
+  const ws = wb.addWorksheet('Sheet1')
+  const rows = tableRows(t)
+  // Numbers stay numbers (but not phone numbers / codes with a leading 0).
+  const cell = (v: string) => (/^-?(0|[1-9][\d,]*)(\.\d+)?$/.test(v) ? Number(v.replace(/,/g, '')) : v)
+  rows.forEach((r, i) => {
+    const row = ws.addRow(i === 0 ? r : r.map(cell))
+    if (i === 0) {
+      row.font = { bold: true }
+      row.eachCell((c) => {
+        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCD021' } }
+      })
+    }
+  })
+  ws.columns.forEach((col, i) => {
+    col.width = Math.min(60, Math.max(10, ...rows.map((r) => (r[i] ?? '').length + 2)))
+  })
+  saveBlob(new Blob([await wb.xlsx.writeBuffer()]), `tiger-ai-table-${stamp()}.xlsx`)
+}
+
+const EXT: Record<string, string> = {
+  javascript: 'js', js: 'js', typescript: 'ts', ts: 'ts', python: 'py', py: 'py', sql: 'sql', json: 'json',
+  csv: 'csv', tsv: 'tsv', html: 'html', xml: 'xml', css: 'css', bash: 'sh', sh: 'sh', shell: 'sh', yaml: 'yml',
+  yml: 'yml', markdown: 'md', md: 'md', java: 'java', php: 'php', vue: 'vue', go: 'go', csharp: 'cs', cs: 'cs',
+  kotlin: 'kt', ruby: 'rb', powershell: 'ps1', ini: 'ini', dockerfile: 'Dockerfile', text: 'txt', plaintext: 'txt',
+}
+function codeToFile(pre: HTMLElement) {
+  const lang = pre.querySelector('code')?.className.match(/language-([\w+-]+)/)?.[1]?.toLowerCase() ?? 'text'
+  const ext = EXT[lang] ?? 'txt'
+  const text = pre.innerText
+  const bom = ext === 'csv' || ext === 'tsv' ? '﻿' : '' // Excel reads Lao text in CSV correctly
+  saveBlob(new Blob([bom + text], { type: 'text/plain;charset=utf-8' }), `tiger-ai-${stamp()}.${ext}`)
+}
+
 async function onListClick(e: MouseEvent) {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('.ai-block-copy')
   if (!btn) return
-  const block = btn.parentElement?.querySelector('pre, table')
+  const block = btn.closest('.ai-block')?.querySelector<HTMLElement>('pre, table')
   if (!block) return
-  const text = block.tagName === 'TABLE' ? tableText(block as HTMLTableElement) : (block as HTMLElement).innerText
+  const isTable = block.tagName === 'TABLE'
+  if (btn.dataset.action === 'xlsx') return tableToExcel(block as HTMLTableElement)
+  if (btn.dataset.action === 'file') return codeToFile(block)
   try {
-    await navigator.clipboard.writeText(text)
+    await navigator.clipboard.writeText(isTable ? tableText(block as HTMLTableElement) : block.innerText)
     const label = btn.textContent
     btn.textContent = '✓ Copied'
     setTimeout(() => (btn.textContent = label), 1500)
   } catch {
     /* clipboard blocked */
   }
+}
+
+// ── the whole answer as a Word document or PDF ──
+function answerHtml(e: MouseEvent) {
+  const md = (e.currentTarget as HTMLElement).closest('.ai-answer')?.querySelector('.ai-md')
+  if (!md) return ''
+  const copy = md.cloneNode(true) as HTMLElement
+  copy.querySelectorAll('.ai-block-bar').forEach((b) => b.remove())
+  return copy.innerHTML
+}
+const DOC_CSS =
+  'body{font-family:"Phetsarath OT","Noto Sans Lao",Arial,sans-serif;font-size:12pt;line-height:1.5}' +
+  'table{border-collapse:collapse}th,td{border:1px solid #999;padding:4px 8px}th{background:#fcd021}' +
+  'pre{background:#f4f4f4;padding:8px;white-space:pre-wrap}'
+function downloadWord(e: MouseEvent) {
+  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>${DOC_CSS}</style></head><body>${answerHtml(e)}</body></html>`
+  saveBlob(new Blob(['﻿' + html], { type: 'application/msword' }), `tiger-ai-${stamp()}.doc`)
+}
+function downloadPdf(e: MouseEvent) {
+  const w = window.open('', '_blank')
+  if (!w) return
+  w.document.write(
+    `<!doctype html><html><head><meta charset="utf-8"><title>Tiger AI</title><style>${DOC_CSS}</style></head><body>${answerHtml(e)}</body></html>`,
+  )
+  w.document.close()
+  w.focus()
+  setTimeout(() => w.print(), 300) // "Save as PDF" in the print window
+}
+async function downloadFile(f: FileInfo) {
+  saveBlob(await (await fetch(await fileUrl(f.id))).blob(), f.name)
 }
 
 const copied = ref<number | null>(null)
@@ -541,6 +647,22 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
                 </div>
                 <!-- eslint-disable-next-line vue/no-v-html -- sanitised with DOMPurify -->
                 <div v-if="m.content" class="ai-md" v-html="md(m.content)" />
+                <div v-if="m.files?.length" class="ai-made">
+                  <figure v-for="f in m.files" :key="f.id" class="ai-made-img">
+                    <button :title="`Open ${f.name}`" @click="openFile(f)">
+                      <img v-if="thumb(f)" :src="thumb(f)" :alt="f.name" />
+                      <v-progress-circular v-else indeterminate size="22" width="2" />
+                    </button>
+                    <figcaption>
+                      <button class="ai-link" @click="downloadFile(f)">
+                        <v-icon icon="mdi-download" size="14" />Download
+                      </button>
+                      <button class="ai-link" @click="openFile(f)">
+                        <v-icon icon="mdi-open-in-new" size="14" />Open
+                      </button>
+                    </figcaption>
+                  </figure>
+                </div>
                 <div v-else-if="m.streaming" class="ai-typing">
                   <span /><span /><span />
                   <em v-if="m.status" class="ai-status-line">{{ m.status }}</em>
@@ -553,6 +675,12 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
                   <button class="ai-link" @click="copy(m.content, i)">
                     <v-icon :icon="copied === i ? 'mdi-check' : 'mdi-content-copy'" size="14" />
                     {{ copied === i ? 'Copied' : 'Copy' }}
+                  </button>
+                  <button class="ai-link" title="Download the answer as a Word document" @click="downloadWord">
+                    <v-icon icon="mdi-file-word-outline" size="14" />Word
+                  </button>
+                  <button class="ai-link" title="Save the answer as PDF (print → Save as PDF)" @click="downloadPdf">
+                    <v-icon icon="mdi-file-pdf-box" size="14" />PDF
                   </button>
                 </div>
               </div>
@@ -585,11 +713,26 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
               :disabled="!provider || pending.length >= 10"
               @click="pickFiles"
             />
+            <v-btn
+              v-if="canImage"
+              icon="mdi-palette-outline"
+              :variant="imageMode ? 'flat' : 'text'"
+              :color="imageMode ? 'primary' : undefined"
+              size="small"
+              :title="imageMode ? 'Picture mode on: the next question creates / edits a picture' : 'Create or edit a picture'"
+              @click="imageMode = !imageMode"
+            />
             <textarea
               ref="inputEl"
               v-model="input"
               rows="1"
-              :placeholder="provider ? `Message ${currentProvider?.name}…  (Enter to send, Shift+Enter new line)` : ''"
+              :placeholder="
+                !provider
+                  ? ''
+                  : imageMode
+                    ? 'Describe the picture to create, or attach one and say what to change…'
+                    : `Message ${currentProvider?.name}…  (Enter to send, Shift+Enter new line)`
+              "
               :disabled="!provider"
               @keydown="onKey"
               @paste="onPaste"
@@ -1109,10 +1252,14 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
 .ai-md :deep(.ai-block table) {
   margin-bottom: 0;
 }
-.ai-md :deep(.ai-block-copy) {
+.ai-md :deep(.ai-block-bar) {
   position: absolute;
   top: 6px;
   right: 6px;
+  display: flex;
+  gap: 4px;
+}
+.ai-md :deep(.ai-block-copy) {
   padding: 2px 8px;
   border-radius: 6px;
   font-size: 0.72rem;
@@ -1124,9 +1271,48 @@ const isAdmin = computed(() => admin.value?.kind !== 'ccare' && admin.value?.rol
 }
 .ai-md :deep(.ai-block-copy:hover) {
   opacity: 1;
+  border-color: #f5b301;
 }
 .ai-md :deep(.ai-block:has(table)) {
   padding-top: 30px;
+}
+.ai-md :deep(.ai-block pre) {
+  padding-top: 34px;
+}
+
+/* pictures made by the AI */
+.ai-made {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 6px 0;
+}
+.ai-made-img {
+  margin: 0;
+}
+.ai-made-img > button {
+  display: grid;
+  place-items: center;
+  width: min(360px, 100%);
+  min-height: 160px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgba(var(--v-theme-on-surface), 0.05);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+}
+.ai-made-img img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.ai-made-img figcaption {
+  display: flex;
+  gap: 12px;
+  margin-top: 4px;
+}
+.ai-tools {
+  display: flex;
+  gap: 14px;
 }
 
 /* attachments */

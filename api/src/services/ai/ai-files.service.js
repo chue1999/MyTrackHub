@@ -125,3 +125,27 @@ export function fileAsText(f) {
   if (!f.data) return `[Attached earlier: "${f.name}" — not sent again because the conversation is large.]`;
   return `File "${f.name}":\n\`\`\`\n${f.data.toString('utf8')}\n\`\`\``;
 }
+
+/** Saves a picture the AI made, as part of its answer. */
+export async function saveGenerated(me, { conversationId, messageId, name, mime, data }) {
+  const f = await AiFile.create({
+    ...ownerOf(me),
+    conversationId,
+    messageId,
+    name,
+    mime,
+    kind: 'image',
+    size: data.length,
+    data,
+  });
+  return fileInfo(f);
+}
+
+/** The newest picture of a conversation (attached or made by the AI) before a message, with its bytes. */
+export async function latestImage(conversationId, beforeMessageId) {
+  const f = await AiFile.findOne({
+    where: { conversationId, kind: 'image', messageId: { [Op.lt]: beforeMessageId } },
+    order: [['id', 'DESC']],
+  });
+  return f ? { name: f.name, mime: f.mime, kind: 'image', data: Buffer.from(f.data) } : null;
+}
