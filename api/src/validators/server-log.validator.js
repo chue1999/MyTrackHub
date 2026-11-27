@@ -58,3 +58,11 @@ export const createTaskSchema = z.object({
   host: z.string().trim().min(1).max(100),
   action: z.enum(SERVER_TASK_ACTIONS),
 });
+
+/** GET /admin/server/history */
+export const historyQuery = z.object({
+  from: z.string().datetime({ offset: true }).optional(),
+  to: z.string().datetime({ offset: true }).optional(),
+  page: z.coerce.number().int().min(1).optional().default(1),
+  pageSize: z.coerce.number().int().min(1).max(5000).optional().default(100),
+});

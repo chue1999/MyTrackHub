@@ -100,11 +100,33 @@ const loading = ref(false)
 const live = ref(true)
 const INTERVAL = 5000
 
+// ── live server date & time (ticks every second) ──
+const clockOffset = ref(0)
+const now = ref(Date.now())
+const clock = setInterval(() => (now.value = Date.now()), 1000)
+onBeforeUnmount(() => clearInterval(clock))
+const serverNow = computed(() => new Date(now.value + clockOffset.value))
+const tz = computed(() => status.value?.system?.timezone)
+const dateText = computed(() =>
+  serverNow.value.toLocaleDateString('en-GB', {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+    ...(tz.value ? { timeZone: tz.value } : {}),
+  }),
+)
+const timeText = computed(() =>
+  serverNow.value.toLocaleTimeString('en-GB', { hour12: false, ...(tz.value ? { timeZone: tz.value } : {}) }),
+)
+
 async function load() {
   if (loading.value) return
   loading.value = true
   try {
     status.value = await api<Status>('/server/status')
+    // The server's clock vs this computer's: the clock below shows server time.
+    clockOffset.value = new Date(status.value.at).getTime() - Date.now()
     error.value = ''
   } catch (e) {
     error.value = errorMessage(e, 'Could not read the server status')
@@ -198,6 +220,12 @@ const elapsed = (v: number | string) => (typeof v === 'number' ? formatDuration(
             {{ formatDuration(s.system.uptime) }} · {{ s.system.timezone }}
           </template>
           <template v-else>Reading…</template>
+        </div>
+      </div>
+      <div class="clock">
+        <div class="clock-time text-mono">{{ timeText }}</div>
+        <div class="text-caption text-medium-emphasis">
+          {{ dateText }}<span v-if="tz"> · {{ tz }}</span>
         </div>
       </div>
       <div class="d-flex align-center ga-2">
@@ -539,6 +567,9 @@ const elapsed = (v: number | string) => (typeof v === 'number' ? formatDuration(
     <div v-else-if="!error" class="d-flex justify-center py-16">
       <v-progress-circular indeterminate color="primary" />
     </div>
+
+    <!-- capacity readings over time, each with date & time -->
+    <ServerHistory class="mt-4" />
   </div>
 </template>
 
@@ -688,5 +719,16 @@ const elapsed = (v: number | string) => (typeof v === 'number' ? formatDuration(
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.78rem;
+}
+.clock {
+  text-align: right;
+  padding: 4px 14px;
+  border-left: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+}
+.clock-time {
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
 }
 </style>

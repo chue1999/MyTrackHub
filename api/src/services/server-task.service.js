@@ -25,7 +25,8 @@ export const ACTIONS = {
   },
   apt: {
     title: 'APT package cache',
-    description: 'Deletes only downloaded .deb installer files (apt-get clean). Installed software and data are not touched.',
+    description:
+      'Deletes only downloaded .deb installer files (apt-get clean). Installed software and data are not touched.',
     risk: 'low',
   },
   tmp: {

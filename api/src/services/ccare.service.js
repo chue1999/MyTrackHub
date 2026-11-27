@@ -95,7 +95,9 @@ export async function checkLogin(name, password) {
   if (!ccareEnabled) return { user: null, reason: 'disabled' };
   const row = await rowByName(name);
   if (!row) return { user: null, reason: 'unknown_user' };
-  const stored = String(row.Password ?? '').trim().toLowerCase();
+  const stored = String(row.Password ?? '')
+    .trim()
+    .toLowerCase();
   if (!isHashed(stored)) return { user: null, reason: 'no_password' };
   if (stored !== md5(password)) return { user: null, reason: 'wrong_password' };
   if (!isActive(row))

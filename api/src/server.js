@@ -2,6 +2,7 @@ import { createApp } from './app.js';
 import { config } from './config/index.js';
 import { connectDatabase, sequelize } from './db/index.js';
 import { startRetentionJob } from './jobs/retention.job.js';
+import { startServerMetricsJob } from './jobs/server-metrics.job.js';
 import './models/index.js';
 import { ensureFirstAdmin } from './services/auth.service.js';
 import { logger } from './utils/logger.js';
@@ -11,6 +12,7 @@ async function start() {
   await connectDatabase();
   await ensureFirstAdmin();
   const stopRetention = startRetentionJob();
+  const stopMetrics = startServerMetricsJob();
 
   const server = createApp().listen(config.port, () => {
     logger.info(`MyTPlus tracking API listening on http://localhost:${config.port} (${config.env})`);
@@ -23,6 +25,7 @@ async function start() {
     closing = true;
     logger.info(`${signal} received, shutting down`);
     stopRetention();
+    stopMetrics();
     server.close(async () => {
       await sequelize.close().catch(() => {});
       process.exit(0);

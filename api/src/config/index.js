@@ -108,6 +108,9 @@ const schema = z.object({
     .string()
     .default('')
     .refine((v) => v === '' || v.length >= 24, 'SERVER_AGENT_KEY must be at least 24 characters'),
+  // Capacity history: one reading every N minutes (0 = off), kept N days.
+  SERVER_METRICS_INTERVAL_MINUTES: z.coerce.number().int().min(0).max(1440).default(5),
+  SERVER_METRICS_KEEP_DAYS: z.coerce.number().int().min(1).max(3650).default(90),
   // After this many seconds without a heartbeat an agent is shown as silent.
   SERVER_AGENT_STALE_SECONDS: z.coerce.number().int().positive().default(180),
 
@@ -202,6 +205,10 @@ export const config = Object.freeze({
 
   ccarePasswordMaxAgeDays: env.CCARE_PASSWORD_MAX_AGE_DAYS,
 
+  serverMetrics: Object.freeze({
+    intervalMs: env.SERVER_METRICS_INTERVAL_MINUTES * 60_000,
+    keepDays: env.SERVER_METRICS_KEEP_DAYS,
+  }),
   serverAgent: Object.freeze({ key: env.SERVER_AGENT_KEY, staleMs: env.SERVER_AGENT_STALE_SECONDS * 1000 }),
 
   // CCare login: delegate to the existing My CCare API ('proxy') or own it ('local').

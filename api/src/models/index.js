@@ -4,6 +4,7 @@ import { CcareAccountDev } from './ccare-account-dev.model.js';
 import { CcareLog } from './ccare-log.model.js';
 import { Event, EVENT_TYPES } from './event.model.js';
 import { ServerAgent, ServerLog, SERVER_LOG_TYPES, SERVER_TASK_ACTIONS, ServerTask } from './server-log.model.js';
+import { ServerMetric } from './server-metric.model.js';
 import { Setting } from './setting.model.js';
 
 // ── associations ──
@@ -19,6 +20,7 @@ export {
   EVENT_TYPES,
   ServerAgent,
   ServerLog,
+  ServerMetric,
   SERVER_LOG_TYPES,
   SERVER_TASK_ACTIONS,
   ServerTask,

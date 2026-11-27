@@ -1,4 +1,5 @@
 import { ipOf } from '../services/ccare-log.service.js';
+import { history } from '../services/server-metrics.service.js';
 import { status } from '../services/server-status.service.js';
 import * as tasks from '../services/server-task.service.js';
 
@@ -31,4 +32,9 @@ export async function agentTasks(req, res) {
 export async function agentTaskResult(req, res) {
   await tasks.finish(req.params.id, req.body);
   res.json({ ok: true });
+}
+
+/** GET /admin/server/history — capacity readings over time (with date & time). */
+export async function getHistory(req, res) {
+  res.json(await history(req.validatedQuery));
 }
